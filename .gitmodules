@@ -1,0 +1,7 @@
+[submodule "PegasusSimulator"]
+	path = PegasusSimulator
+	url = https://github.com/Jason-xy/PegasusSimulator.git
+[submodule "PX4-Autopilot"]
+	path = PX4-Autopilot
+	url = https://github.com/PX4/PX4-Autopilot.git
+	branch = v1.14.1
