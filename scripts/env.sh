@@ -16,3 +16,6 @@ export FASTRTPS_DEFAULT_PROFILES_FILE=$BASE_DIR/ros_bridge/dds_profile.xml
 
 # ros2_bridge extension
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ISAACSIM_PATH/exts/omni.isaac.ros2_bridge/humble/lib
+
+# Fix visualizer issue. Don't point to any display.
+export DISPLAY=:

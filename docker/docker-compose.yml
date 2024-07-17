@@ -19,13 +19,13 @@ services:
       - PRIVACY_CONSENT=Y
       - NVIDIA_VISIBLE_DEVICES=all
       - FASTRTPS_DEFAULT_PROFILES_FILE=/omninxt-sim/ros_bridge/dds_profile.xml
-      - DISPLAY=:1.0
+      - DISPLAY=:10.0
     volumes:
       - ${OMNINXT_SIM_PATH}:/omninxt-sim
       - ${HOME}/.Xauthority:/root/.Xauthority:rw
       - /tmp/.X11-unix:/tmp/.X11-unix
     runtime: nvidia
-    entrypoint: ["bash", "-c", "/omninxt-sim/docker/sim/repair_repo.sh && cd /omninxt-sim/PX4-Autopilot && make clean && make px4_sitl_default && source /omninxt-sim/scripts/env.sh && . /isaac-sim/runheadless.native.sh -v"]
+    entrypoint: ["bash", "-c", "/omninxt-sim/docker/sim/repair_repo.sh && cd /omninxt-sim/PX4-Autopilot && make px4_sitl_default && source /omninxt-sim/scripts/env.sh && . /isaac-sim/runheadless.native.sh -v"]
 
   novnc:
     image: novnc

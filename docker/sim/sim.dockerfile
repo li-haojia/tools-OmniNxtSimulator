@@ -66,3 +66,4 @@ RUN sudo usermod -a -G dialout ${USER} && \
     echo "alias qgc='/home/${USER}/QGroundControl/QGroundControl'" >> ~/.bashrc
 
 USER root
+RUN echo "alias qgc='sudo -u ${USER} /home/${USER}/QGroundControl/QGroundControl'" >> /root/.bashrc

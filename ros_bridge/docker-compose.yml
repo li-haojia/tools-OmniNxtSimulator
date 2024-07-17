@@ -6,5 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ros_bridge
-    restart: unless-stopped
+    restart: no
     network_mode: host
+    environment:
+      - DISPLAY=:10.0
