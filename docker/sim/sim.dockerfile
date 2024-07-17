@@ -23,18 +23,6 @@ RUN apt update && \
     ./install_geographiclib_datasets.sh && \
     rm install_geographiclib_datasets.sh
 
-# Install QGroundControl
-RUN apt update && \
-    apt-get remove modemmanager -y && \
-    apt install gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl -y && \
-    apt install libfuse2 -y && \
-    apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0 -y && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    cd /usr/bin && \
-    wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage && \
-    chmod +x QGroundControl.AppImage
-
 # PX4 Dependencies
 RUN apt update && \
     apt install -y \
@@ -45,3 +33,36 @@ RUN apt update && \
     python3 -m pip install kconfiglib jinja2 empy jsonschema pyros-genmsg packaging toml numpy future && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
+
+# User setup
+ARG USER=coder
+RUN useradd --groups sudo --shell /bin/bash ${USER} --create-home \
+	&& echo "${USER} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/${USER} \
+	&& chmod 0440 /etc/sudoers.d/${USER}
+
+# Desktop setup
+RUN apt update && \
+    apt install -y \
+    iputils-ping \
+    net-tools && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+
+USER ${USER}
+# Install QGroundControl
+RUN sudo usermod -a -G dialout ${USER} && \
+    sudo apt update && \
+    sudo apt-get remove modemmanager -y && \
+    sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl -y && \
+    sudo apt install libfuse2 -y && \
+    sudo apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0 -y && \
+    sudo apt clean && \
+    sudo rm -rf /var/lib/apt/lists/* && \
+    cd /home/${USER} && \
+    wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage && \
+    chmod +x QGroundControl.AppImage && \
+    ./QGroundControl.AppImage --appimage-extract && \
+    mv squashfs-root QGroundControl && \
+    echo "alias qgc='/home/${USER}/QGroundControl/QGroundControl'" >> ~/.bashrc
+
+USER root
