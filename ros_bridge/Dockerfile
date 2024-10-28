@@ -33,7 +33,7 @@ RUN apt-get update -y && \
     wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    python3 -m pip install -U colcon-common-extensions vcstool
+    python3 -m pip install -U colcon-common-extensions vcstool empy==3.3.4
 
 # Build ROS2 humble
 RUN mkdir -p /ros2_humble/src && \
