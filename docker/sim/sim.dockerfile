@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/isaac-sim:2023.1.1
+FROM nvcr.io/nvidia/isaac-sim:4.2.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -30,7 +30,7 @@ RUN apt update && \
     make \
     cmake \
     python3-pip && \
-    python3 -m pip install kconfiglib jinja2 empy jsonschema pyros-genmsg packaging toml numpy future && \
+    python3 -m pip install kconfiglib jinja2 empy jsonschema pyros-genmsg packaging toml numpy future pymavlink && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 

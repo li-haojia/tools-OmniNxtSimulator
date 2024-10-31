@@ -7,7 +7,24 @@ from omni.isaac.kit import SimulationApp
 # Start Isaac Sim's simulation environment
 # Note: this simulation app must be instantiated right after the SimulationApp import, otherwise the simulator will crash
 # as this is the object that will load all the extensions and load the actual simulator.
-simulation_app = SimulationApp({"headless": False})
+simulation_app = SimulationApp({"headless": True})
+
+from omni.isaac.core.utils.extensions import enable_extension
+# Default Livestream settings
+simulation_app.set_setting("/app/fastShutdown", True)
+simulation_app.set_setting("/app/livestream/proto", "ws")
+simulation_app.set_setting("/app/livestream/allowResize", True)
+simulation_app.set_setting("/app/window/title", "Isaac Sim Headless Native Livestream")
+simulation_app.set_setting("/app/window/drawMouse", True)
+simulation_app.set_setting("/app/window/hideUi", False)
+simulation_app.set_setting("/app/window/width", 1920)
+simulation_app.set_setting("/app/window/height", 1080)
+
+# Enable Native Livestream extension
+enable_extension("omni.kit.streamsdk.plugins-3.2.1")
+enable_extension("omni.kit.livestream.core-3.2.0")
+enable_extension("omni.kit.livestream.native-4.1.0")
+
 
 # -----------------------------------
 # The actual script should start here
@@ -27,7 +44,7 @@ sys.path.append(os.path.join(BASE_DIR, 'PegasusSimulator/extensions/pegasus.simu
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS
 from pegasus.simulator.logic.state import State
 from pegasus.simulator.logic.backends.ros2_backend import ROS2Backend
-from pegasus.simulator.logic.graphs import ROS2Camera
+from pegasus.simulator.logic.graphs import ROS2CameraGraph
 from pegasus.simulator.logic.vehicles.multirotor import Multirotor, MultirotorConfig
 from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
 
@@ -62,11 +79,11 @@ class PegasusApp:
         # Try to spawn the selected robot in the world to the specified namespace
         config_multirotor = MultirotorConfig()
         config_multirotor.backends = [ROS2Backend(vehicle_id=1, config={"namespace": 'drone'})]
-        config_multirotor.graphs = [
-            ROS2Camera("/vehicle/body/OmniCam/cam_0", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_0', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-            ROS2Camera("/vehicle/body/OmniCam/cam_1", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_1', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-            ROS2Camera("/vehicle/body/OmniCam/cam_2", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_2', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-            ROS2Camera("/vehicle/body/OmniCam/cam_3", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_3', "tf_frame_id": 'map', 'resolution': [1280, 960]})]
+        # config_multirotor.graphs = [
+        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_0", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_0', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
+        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_1", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_1', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
+        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_2", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_2', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
+        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_3", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_3', "tf_frame_id": 'map', 'resolution': [1280, 960]})]
 
         Multirotor(
             "/World/quadrotor",

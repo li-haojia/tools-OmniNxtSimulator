@@ -25,7 +25,8 @@ services:
       - ${HOME}/.Xauthority:/root/.Xauthority:rw
       - /tmp/.X11-unix:/tmp/.X11-unix
     runtime: nvidia
-    entrypoint: ["bash", "-c", "/omninxt-sim/docker/sim/repair_repo.sh && cd /omninxt-sim/PX4-Autopilot && make px4_sitl_default && source /omninxt-sim/scripts/env.sh && . /isaac-sim/runheadless.native.sh -v"]
+    # entrypoint: ["bash", "-c", "/omninxt-sim/docker/sim/repair_repo.sh && cd /omninxt-sim/PX4-Autopilot && make px4_sitl_default && source /omninxt-sim/scripts/env.sh && . /isaac-sim/runheadless.native.sh -v"]
+    entrypoint: ["bash", "-c", "sleep 99999"]
 
   novnc:
     image: novnc

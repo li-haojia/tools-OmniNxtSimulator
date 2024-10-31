@@ -3,7 +3,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Isaac Sim root directory
-export ISAACSIM_PATH="/home/dji/service/isaac-sim/pkg/isaac-sim-2023.1.1"
+export ISAACSIM_PATH="/isaac-sim"
 # Isaac Sim python executable
 alias ISAACSIM_PYTHON="${ISAACSIM_PATH}/python.sh"
 # Isaac Sim app

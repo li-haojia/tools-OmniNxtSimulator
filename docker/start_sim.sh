@@ -5,4 +5,4 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 export OMNINXT_SIM_PATH=$BASE_DIR
 
 cd $SCRIPT_DIR
-docker-compose up -d
+docker-compose up -d --build
