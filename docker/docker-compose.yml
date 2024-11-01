@@ -12,6 +12,7 @@ services:
     depends_on:
       - novnc
     privileged: true
+    ipc: host
     network_mode: host
 
     environment:
@@ -26,7 +27,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
     runtime: nvidia
     # entrypoint: ["bash", "-c", "/omninxt-sim/docker/sim/repair_repo.sh && cd /omninxt-sim/PX4-Autopilot && make px4_sitl_default && source /omninxt-sim/scripts/env.sh && . /isaac-sim/runheadless.native.sh -v"]
-    entrypoint: ["bash", "-c", "sleep 99999"]
+    entrypoint: ["tail", "-f", "/dev/null"]
 
   novnc:
     image: novnc
@@ -37,6 +38,7 @@ services:
     # http://<Host>:8080/vnc.html
     # DISPLAY=:1.0
     network_mode: host
+    ipc: host
     environment:
       # Adjust to your screen size
       - DISPLAY_WIDTH=1600

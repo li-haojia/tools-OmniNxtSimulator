@@ -31,6 +31,7 @@ RUN apt update && \
     cmake \
     python3-pip && \
     python3 -m pip install kconfiglib jinja2 empy jsonschema pyros-genmsg packaging toml numpy future pymavlink && \
+    /isaac-sim/python.sh -m pip install pymavlink && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 

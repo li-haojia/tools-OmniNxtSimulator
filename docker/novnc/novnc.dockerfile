@@ -12,7 +12,22 @@ RUN set -ex; \
     supervisor \
     x11vnc \
     xterm \
-    xvfb
+    xvfb && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-libav \
+    gstreamer1.0-gl \
+    libfuse2 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor-dev && \
+    apt-get remove -y modemmanager && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Setup demo environment variables
 ENV HOME=/root \

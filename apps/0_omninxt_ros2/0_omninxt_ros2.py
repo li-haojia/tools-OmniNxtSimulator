@@ -2,7 +2,7 @@
 
 # Imports to start Isaac Sim from this script
 import carb
-from omni.isaac.kit import SimulationApp
+from isaacsim import SimulationApp
 
 # Start Isaac Sim's simulation environment
 # Note: this simulation app must be instantiated right after the SimulationApp import, otherwise the simulator will crash
@@ -44,7 +44,9 @@ sys.path.append(os.path.join(BASE_DIR, 'PegasusSimulator/extensions/pegasus.simu
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS
 from pegasus.simulator.logic.state import State
 from pegasus.simulator.logic.backends.ros2_backend import ROS2Backend
+from pegasus.simulator.logic.backends.mavlink_backend import MavlinkBackend
 from pegasus.simulator.logic.graphs import ROS2CameraGraph
+from pegasus.simulator.logic.graphical_sensors.monocular_camera import MonocularCamera
 from pegasus.simulator.logic.vehicles.multirotor import Multirotor, MultirotorConfig
 from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
 
@@ -78,12 +80,22 @@ class PegasusApp:
         # Create the vehicle
         # Try to spawn the selected robot in the world to the specified namespace
         config_multirotor = MultirotorConfig()
-        config_multirotor.backends = [ROS2Backend(vehicle_id=1, config={"namespace": 'drone'})]
-        # config_multirotor.graphs = [
-        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_0", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_0', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_1", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_1', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_2", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_2', "tf_frame_id": 'map', 'resolution': [1280, 960]}),
-        #     ROS2CameraGraph("/vehicle/body/OmniCam/cam_3", config={"types": ['rgb', 'camera_info', 'depth_pcl', 'depth'], "namespace": 'omninxt0', "topic": 'cam_3', "tf_frame_id": 'map', 'resolution': [1280, 960]})]
+        config_multirotor.backends = [ROS2Backend(vehicle_id=1, config={
+            "namespace": 'drone',
+            "pub_sensors": True,
+            "pub_graphical_sensors": True,
+            "pub_state": True,
+            "pub_tf": False,
+            "sub_control": False}
+            ),
+            MavlinkBackend()
+        ]
+        config_multirotor.graphical_sensors = [
+            MonocularCamera("cam_0", config={"stage_prim_path":"/World/quadrotor/body/OmniCam/cam_0", 'resolution': [1280, 960], "update_rate": 60.0}), 
+            MonocularCamera("cam_1", config={"stage_prim_path":"/World/quadrotor/body/OmniCam/cam_1", 'resolution': [1280, 960], "update_rate": 60.0}),
+            MonocularCamera("cam_2", config={"stage_prim_path":"/World/quadrotor/body/OmniCam/cam_2", 'resolution': [1280, 960], "update_rate": 60.0}), 
+            MonocularCamera("cam_3", config={"stage_prim_path":"/World/quadrotor/body/OmniCam/cam_3", 'resolution': [1280, 960], "update_rate": 60.0})
+        ]
 
         Multirotor(
             "/World/quadrotor",
