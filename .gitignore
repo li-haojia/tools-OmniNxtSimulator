@@ -1,3 +1,4 @@
 log
 *.AppImage
 */**/*.usd
+*/**/__pycache__
