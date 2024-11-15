@@ -1,26 +1,12 @@
 # tools-OmniNxtSimulator
 
-OmniNxt simulator based on Isaac Sim
+OmniNxt simulator based on Isaac Lab
 
 ## Installation
 
-1. Install Isaac Sim
+### TODO
 
-2. Install ROS2 humble
-
-3. Clone this repository
-
-```bash
-git clone https://github.com/D2SLAM-Fusion/tools-OmniNxtSimulator.git
-cd tools-OmniNxtSimulator
-./scripts/init.sh
-```
-
-3. Setup the environment
-
-[PegasusSimulator](https://pegasussimulator.github.io/PegasusSimulator/source/setup/installation.html)
-
-4. ROS2 <-> ROS1 communication bridge
+## ROS2 <-> ROS1 communication bridge
 
 This bridge will automatically map the ROS2 topics to ROS1 topics. This is useful for the ROS1 packages that are not yet ported to ROS2.
 
