@@ -1,6 +1,10 @@
 import numpy as np
 
 class Quadrotor:
+    # Multi robot
+    id = -1
+    name_space = ""
+
     # Configuration
     alpha0_ = 45.0 # deg
     mass_ = 1.0 # kg
@@ -17,10 +21,15 @@ class Quadrotor:
     linear_velocity_ = np.zeros(3)
     angular_velocity_ = np.zeros(3)
     motor_rpms_ = np.zeros(4)
-    motor_forces_ = np.zeros(4)
-    motor_torques_ = np.zeros(4)
+    prop_forces = []
+    prop_torques = []
 
-    def __init__(self, config):
+    # Simulation
+    controller_instance_ = None
+    robot_instance_ = None
+    ros2_odom_publisher_ = None
+
+    def __init__(self, id, config):
         self.alpha0_ = config.get("alpha0", self.alpha0_)
         self.mass_ = config.get("mass", self.mass_)
         self.gravity_ = config.get("gravity", self.gravity_)
@@ -28,6 +37,8 @@ class Quadrotor:
         self.arm_length_ = config.get("arm_length", self.arm_length_)
         self.min_rpm_ = config.get("min_rpm", self.min_rpm_)
         self.max_rpm_ = config.get("max_rpm", self.max_rpm_)
+        self.id = id
+        self.name_space = f"/robot_{self.id}"
 
     def quaternion_to_rotation(self, quaternion):
         q0, q1, q2, q3 = quaternion
@@ -48,3 +59,13 @@ class Quadrotor:
         self.rotation_ = self.quaternion_to_rotation(quaternion)
         self.linear_velocity_ = linear_velocity
         self.angular_velocity_ = angular_velocity
+
+    def update_control(self, forces, torques):
+        self.prop_forces = forces
+        self.prop_torques = torques
+
+    def set_mass(self, mass):
+        self.mass_ = mass
+
+    def set_inertia(self, inertia):
+        self.inertia_ = inertia # Ixx, Iyy, Izz

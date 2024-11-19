@@ -158,8 +158,8 @@ class SO3Control:
         rotation_vector = quaternion_error[:3] * 2.0
 
         # Set angular velocity as proportional to rotation vector (simple PD control, adjustable as needed)
-        kp = 3.0  # Proportional gain
-        kd = 0.25  # Derivative gain (if angular velocity feedback available)
+        kp = 10.0  # Proportional gain
+        kd = kp * 0.05  # Derivative gain (if angular velocity feedback available)
 
         self.angular_velocity = kp * rotation_vector - kd * (self.angular_velocity)
 

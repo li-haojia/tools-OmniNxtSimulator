@@ -34,7 +34,7 @@ class UAVController:
         forces, torques = self.get_px4_forces(0, ang_vel_x, ang_vel_y, ang_vel_z)
         return forces, torques
 
-    def allocate_forces_and_torques(self, arm_length, throttle, omega_x, omega_y, omega_z, k=1.0):
+    def allocate_forces_and_torques(self, arm_length, throttle, omega_x, omega_y, omega_z, k=0.1):
         """
         Allocates the required forces and torques to each motor of an X-shaped quadrotor.
 
@@ -51,19 +51,37 @@ class UAVController:
                 Keys are 'left_front', 'left_back', 'right_front', 'right_back'.
                 Each key maps to another dictionary with 'force' and 'torque_z'.
         """
+        # Get current omega values
+        current_omega_x = self.quadopter.angular_velocity_[0]
+        current_omega_y = self.quadopter.angular_velocity_[1]
+        current_omega_z = self.quadopter.angular_velocity_[2]
+
+        # Calculate the omega error
+        omega_x = omega_x - current_omega_x
+        omega_y = omega_y - current_omega_y
+        omega_z = omega_z - current_omega_z
+
         # Total thrust required
         F_total = throttle
 
         # Proportional gains for mapping angular velocities to desired torques
-        # These gains should be tuned according to the controller design
-        Kx = 1.2  # Gain for roll
-        Ky = 1.2  # Gain for pitch
-        Kz = 3.0  # Gain for yaw
+        # torques = omega * moments_of_inertia * omega_dot
+        Kx = 2.64e-1  # Gain for roll
+        Ky = 2.64e-1  # Gain for pitch
+        Kz = 5.28e-1  # Gain for yaw
+
+        dx = Kx * 0.03
+        dy = Ky * 0.03
+        dz = Kz * 0.03
 
         # Desired torques
-        tau_x = Kx * omega_x  # Roll torque
-        tau_y = Ky * omega_y  # Pitch torque
-        tau_z = Kz * omega_z  # Yaw torque
+        tau_x = Kx * omega_x - dx * current_omega_x  # Roll torque
+        tau_y = Ky * omega_y - dy * current_omega_y  # Pitch torque
+        tau_z = Kz * omega_z - dz * current_omega_z  # Yaw torque
+
+        max_torque_z = 0.1
+        min_torque_z = -0.1
+        tau_z = max(min(tau_z, max_torque_z), min_torque_z)
 
         # Calculate arm length components for X configuration
         # In X configuration, the thrust direction is at 45 degrees to the body axes

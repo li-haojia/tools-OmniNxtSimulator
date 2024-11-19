@@ -1,5 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+export PYTHONPATH=$PYTHONPATH:$SCRIPT_DIR
 
 function usage {
     echo "Usage: $0 <target_script>"

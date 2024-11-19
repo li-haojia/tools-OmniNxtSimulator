@@ -1,22 +1,7 @@
-import argparse
 import threading
 import torch
 import logging
-
-from omni.isaac.lab.app import AppLauncher
-def parse_arguments():
-    """Parse command-line arguments.
-
-    Returns:
-        argparse.Namespace: Parsed arguments.
-    """
-    parser = argparse.ArgumentParser(description="Simulator for UAV with ROS2")
-    AppLauncher.add_app_launcher_args(parser)
-    args = parser.parse_args()
-    return args
-
-app_launcher = AppLauncher(parse_arguments())
-simulation_app = app_launcher.app
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
@@ -30,16 +15,13 @@ from omni.isaac.lab.assets import Articulation
 from omni.isaac.lab.sim import SimulationContext
 from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 from omni.isaac.lab.app import AppLauncher
-from controller.omninxt import OmniNxt
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-
+from controller.controller import Controller
 
 class UAVSimulation:
     """Class to handle OMNINXT simulation with ROS2 integration."""
 
-    def __init__(self, simulation_app, quadrotor):
+    def __init__(self, simulation_app, quadrotors = []):
         """Initialize the simulation and ROS2 components.
 
         Args:
@@ -57,40 +39,43 @@ class UAVSimulation:
         self.sim.set_camera_view(eye=[0.5, 0.5, 1.0], target=[0.0, 0.0, 0.5])
 
         # Add quadrotor to the simulation
-        self.quadrotor = quadrotor
+        self.quadrotors = quadrotors
+        self.robot_num = len(self.quadrotors)
+        if(self.robot_num == 0):
+            logging.warning("No robots added to the simulation.")
 
         # Initialize ROS2
         rclpy.init(args=None)
         self.ros2_node = rclpy.create_node('omninxt_sim')
 
-        # ROS2 Publisher and Subscriber
-        self.robot_odom_publisher = self.ros2_node.create_publisher(Odometry, '/odom', 10)
-        self.prop_force_subscriber = self.ros2_node.create_subscription(
-            Float32MultiArray,
-            '/prop_force',
-            self.prop_force_callback,
-            10
-        )
-        self.prop_torque_subscriber = self.ros2_node.create_subscription(
-            Float32MultiArray,
-            '/prop_torque',
-            self.prop_torque_callback,
-            10
-        )
+        # Load environment
+        self.load_environment()
 
         # Thread synchronization
         self.lock = threading.Lock()
-        self.prop_force = torch.zeros(4, 3).to(self.sim.device)
-        self.prop_torque = torch.zeros(4, 3).to(self.sim.device)
         self.reset_robot = False
         self.shutdown_event = threading.Event()
 
-        # Load environment and robot
-        self.load_environment()
-        self.load_robot()
+        # Initialize robots
+        self.initialize_robots()
 
         # Prepare simulation parameters
         self.prepare_simulation()
+
+    def initialize_robots(self):
+        # Robots initialization
+        for quadrotor in self.quadrotors:
+            # ROS2 Publisher and Subscriber
+            quadrotor.ros2_odom_publisher_ = self.ros2_node.create_publisher(Odometry, quadrotor.name_space + '/odom', 10)
+
+            # Load robot into simulation
+            robot_cfg = quadrotor.ISAAC_SIM_CFG.replace(prim_path=f"/World{quadrotor.name_space}/OmniNxt")
+            robot_cfg.spawn.func(f"/World{quadrotor.name_space}/OmniNxt", robot_cfg.spawn, translation=robot_cfg.init_state.pos)
+            quadrotor.robot_instance_ = Articulation(robot_cfg)
+            logging.info(f"OMNINXT robot_{quadrotor.id} spawned.")
+
+            # Initialize robot controller
+            quadrotor.controller_instance_ = Controller(self.ros2_node, quadrotor)
 
     def load_environment(self):
         """Load the warehouse environment into the simulation stage."""
@@ -98,13 +83,6 @@ class UAVSimulation:
         # env_usd_path = f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd"
         add_reference_to_stage(env_usd_path, "/World/Environment")
         logging.info("Environment loaded.")
-
-    def load_robot(self):
-        """Spawn the OMNINXT robot into the simulation."""
-        robot_cfg = self.quadrotor.ISAAC_SIM_CFG.replace(prim_path="/World/OmniNxt")
-        robot_cfg.spawn.func("/World/OmniNxt", robot_cfg.spawn, translation=robot_cfg.init_state.pos)
-        self.robot = Articulation(robot_cfg)
-        logging.info("OMNINXT robot spawned.")
 
     def prepare_simulation(self):
         """Initialize simulation parameters and reset the simulation."""
@@ -114,53 +92,14 @@ class UAVSimulation:
 
     def simulate_initial_robot_state(self):
         """Set the initial state of the robot in the simulation."""
-        joint_pos, joint_vel = self.robot.data.default_joint_pos, self.robot.data.default_joint_vel
-        self.robot.write_joint_state_to_sim(joint_pos, joint_vel)
-        self.robot.write_root_pose_to_sim(self.robot.data.default_root_state[:, :7])
-        self.robot.write_root_velocity_to_sim(self.robot.data.default_root_state[:, 7:])
-        self.robot.reset()
-
-    def prop_force_callback(self, msg: Float32MultiArray):
-        """Callback function to handle incoming propeller force messages.
-
-        Args:
-            msg (Float32MultiArray): Incoming propeller forces.
-        """
-        logging.debug(f"Received prop_force: {msg.data}")
-        try:
-            if len(msg.data) != 4:
-                logging.warning("Received prop_force message with unexpected length.")
-                return
-            self.prop_force = torch.tensor([
-                [0.0, 0.0, msg.data[0]],
-                [0.0, 0.0, msg.data[1]],
-                [0.0, 0.0, msg.data[2]],
-                [0.0, 0.0, msg.data[3]]
-            ], device=self.sim.device)
-            logging.debug(f"prop_force_updated: {self.prop_force}")
-        except Exception as e:
-            logging.error(f"Error processing prop_force message: {e}")
-
-    def prop_torque_callback(self, msg: Float32MultiArray):
-        """Callback function to handle incoming propeller torque messages.
-
-        Args:
-            msg (Float32MultiArray): Incoming propeller torques.
-        """
-        logging.debug(f"Received prop_torque: {msg.data}")
-        try:
-            if len(msg.data) != 4:
-                logging.warning("Received prop_torque message with unexpected length.")
-                return
-            self.prop_torque = torch.tensor([
-                [0.0, 0.0, msg.data[0]],
-                [0.0, 0.0, msg.data[1]],
-                [0.0, 0.0, msg.data[2]],
-                [0.0, 0.0, msg.data[3]]
-            ], device=self.sim.device)
-            logging.debug(f"prop_torque_updated: {self.prop_torque}")
-        except Exception as e:
-            logging.error(f"Error processing prop_torque message {e}")
+        for quadrotor in self.quadrotors:
+            joint_pos, joint_vel = quadrotor.robot_instance_.data.default_joint_pos, quadrotor.robot_instance_.data.default_joint_vel
+            quadrotor.robot_instance_.write_joint_state_to_sim(joint_pos, joint_vel)
+            quadrotor.robot_instance_.write_root_pose_to_sim(quadrotor.robot_instance_.data.default_root_state[:, :7])
+            quadrotor.robot_instance_.write_root_velocity_to_sim(quadrotor.robot_instance_.data.default_root_state[:, 7:])
+            quadrotor.prop_forces = []
+            quadrotor.prop_torques = []
+            quadrotor.robot_instance_.reset()
 
     def ros_spin(self):
         """Spin the ROS2 node to process callbacks."""
@@ -189,13 +128,13 @@ class UAVSimulation:
                 logging.error(f"Error in user input thread: {e}")
                 break
 
-    def get_robot_data(self):
+    def get_robot_data(self, robot):
         """Retrieve relevant robot data from the simulation.
 
         Returns:
             dict: Dictionary containing robot position, orientation, and angular velocity.
         """
-        robot_data = self.robot.data.root_state_w # [pos:3, quat:4, lin_vel:3, ang_vel:3]
+        robot_data = robot.data.root_state_w # [pos:3, quat:4, lin_vel:3, ang_vel:3]
         # Convert robot data to dictionary as numpy arrays
         robot_data_dict = {
             "root_pos_w": robot_data[:, :3].detach()[0],
@@ -205,7 +144,7 @@ class UAVSimulation:
         }
         return robot_data_dict
 
-    def send_robot_data_by_ros2(self, robot_data_dict):
+    def send_robot_data_by_ros2(self, publisher, robot_data_dict):
         """Publish the robot's odometry data to ROS2.
 
         Args:
@@ -236,69 +175,56 @@ class UAVSimulation:
         msg.twist.twist.angular.y = robot_data_dict["root_ang_vel_w"][1].item()
         msg.twist.twist.angular.z = robot_data_dict["root_ang_vel_w"][2].item()
 
-        self.robot_odom_publisher.publish(msg)
+        publisher.publish(msg)
         logging.debug("Published Odometry message.")
 
     def reset_robot_state(self):
         """Reset the robot's state in the simulation."""
         self.simulate_initial_robot_state()
-        self.prop_force = torch.zeros(4, 3).to(self.sim.device)
-        self.prop_torque = torch.zeros(4, 3).to(self.sim.device)
         self.reset_robot = False
         logging.info("Robot state has been reset.")
 
     def run_simulation_loop(self):
         """Run the main simulation loop."""
-        sim_dt = self.sim.get_physics_dt()
-        sim_time = 0.0
-        count = 0
-
-        # Simulation step preparation
-        joint_pos, joint_vel = self.robot.data.default_joint_pos, self.robot.data.default_joint_vel
-        self.robot.write_joint_state_to_sim(joint_pos, joint_vel)
-        self.robot.write_root_pose_to_sim(self.robot.data.default_root_state[:, :7])
-        self.robot.write_root_velocity_to_sim(self.robot.data.default_root_state[:, 7:])
-        self.robot.reset()
-
-        # Physics parameters
-        prop_body_ids = self.robot.find_bodies("rotor.*")[0]
-        robot_mass = self.robot.root_physx_view.get_masses().sum()
-        gravity = torch.tensor(self.sim.cfg.gravity, device=self.sim.device).norm()
-
         logging.info("Starting simulation loop.")
 
         try:
             while self.simulation_app.is_running():
-                # Retrieve current robot data
-                robot_data_dict = self.get_robot_data()
 
                 # Apply external forces and torques
-                forces = self.prop_force.clone().unsqueeze(0)  # Shape: [1, 4, 3]
-                torques = self.prop_torque.clone().unsqueeze(0)  # Shape: [1, 4, 3]
+                for quadrotor in self.quadrotors:
+                    quadrotor.controller_instance_.run_control()
+                    forces = torch.zeros((1, 4, 3), device=self.sim.device)
+                    torques = torch.zeros_like(forces)
 
-                self.robot.set_external_force_and_torque(forces, torques, body_ids=prop_body_ids)
-                self.robot.write_data_to_sim()
+                    forces[0, :, 2] = torch.tensor(quadrotor.prop_forces)
+                    torques[0, :, 2] = torch.tensor(quadrotor.prop_torques)
+
+                    prop_body_ids = quadrotor.robot_instance_.find_bodies("rotor.*")[0]
+                    quadrotor.robot_instance_.set_external_force_and_torque(forces, torques, body_ids=prop_body_ids)
+                    quadrotor.robot_instance_.write_data_to_sim()
 
                 # Step the simulation
                 self.sim.step()
-                sim_time += sim_dt
-                count += 1
+                sim_dt = self.sim.get_physics_dt()
 
-                # Update robot state
-                self.robot.update(sim_dt)
+                for quadrotor in self.quadrotors:
+                    quadrotor.robot_instance_.update(sim_dt)
+                    # Retrieve current robot data
+                    robot_data_dict = self.get_robot_data(quadrotor.robot_instance_)
+                    # Publish robot data to ROS2
+                    quadrotor.update_state(
+                        robot_data_dict["root_pos_w"].cpu().numpy(),
+                        robot_data_dict["root_quat_w"].cpu().numpy(),
+                        robot_data_dict["root_lin_vel_w"].cpu().numpy(),
+                        robot_data_dict["root_ang_vel_w"].cpu().numpy()
+                    )
+                    self.send_robot_data_by_ros2(quadrotor.ros2_odom_publisher_, robot_data_dict)
 
                 # Handle robot reset if requested
                 if self.reset_robot:
                     self.reset_robot_state()
 
-                # Publish robot data to ROS2
-                self.quadrotor.update_state(
-                    robot_data_dict["root_pos_w"].cpu().numpy(),
-                    robot_data_dict["root_quat_w"].cpu().numpy(),
-                    robot_data_dict["root_lin_vel_w"].cpu().numpy(),
-                    robot_data_dict["root_ang_vel_w"].cpu().numpy()
-                )
-                self.send_robot_data_by_ros2(robot_data_dict)
         except KeyboardInterrupt:
             logging.info("Simulation interrupted by user.")
         except Exception as e:
@@ -344,13 +270,3 @@ class UAVSimulation:
         self.start_ros_spin_thread()
         self.start_user_input_thread()
         self.run_simulation_loop()
-
-def main():
-    """Main entry point for the simulation."""
-    quadrotor = OmniNxt()
-    simulation = UAVSimulation(simulation_app, quadrotor)
-    simulation.run()
-
-
-if __name__ == "__main__":
-    main()
