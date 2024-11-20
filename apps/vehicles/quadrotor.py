@@ -27,6 +27,7 @@ class Quadrotor:
     # Simulation
     controller_instance_ = None
     robot_instance_ = None
+    sensor_list_ = []
     ros2_odom_publisher_ = None
 
     def __init__(self, id, config):
@@ -39,6 +40,10 @@ class Quadrotor:
         self.max_rpm_ = config.get("max_rpm", self.max_rpm_)
         self.id = id
         self.name_space = f"/robot_{self.id}"
+
+    def initialize_sensors(self):
+        for sensor in self.sensor_list_:
+            sensor.initialize()
 
     def quaternion_to_rotation(self, quaternion):
         q0, q1, q2, q3 = quaternion

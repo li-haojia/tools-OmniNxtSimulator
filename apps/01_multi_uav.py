@@ -16,6 +16,10 @@ def parse_arguments():
 app_launcher = AppLauncher(parse_arguments())
 simulation_app = app_launcher.app
 
+# Enable ROS2 bridge extension
+from omni.isaac.core.utils import extensions
+extensions.enable_extension("omni.isaac.ros2_bridge")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
@@ -26,11 +30,12 @@ from vehicles.omninxt import OmniNxt
 
 def main():
     """Main entry point for the simulation."""
-    quadrotor_0 = OmniNxt(id=0, init_pos=(1.0, 1.0, 0.5))
-    quadrotor_1 = OmniNxt(id=1, init_pos=(1.0, -1.0, 0.5))
-    quadrotor_2 = OmniNxt(id=2, init_pos=(-1.0, 1.0, 0.5))
-    quadrotor_3 = OmniNxt(id=3, init_pos=(-1.0, -1.0, 0.5))
-    quadrotors = [quadrotor_0, quadrotor_1, quadrotor_2, quadrotor_3]
+    quadrotors = [
+        OmniNxt(id=0, init_pos=(1.0, 1.0, 0.5)),
+        OmniNxt(id=1, init_pos=(1.0, -1.0, 0.5)),
+        OmniNxt(id=2, init_pos=(-1.0, 1.0, 0.5)),
+        OmniNxt(id=3, init_pos=(-1.0, -1.0, 0.5)),
+    ]
     simulation = UAVSimulation(simulation_app, quadrotors)
     simulation.run()
 

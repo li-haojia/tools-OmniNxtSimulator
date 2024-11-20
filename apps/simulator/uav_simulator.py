@@ -69,13 +69,15 @@ class UAVSimulation:
             quadrotor.ros2_odom_publisher_ = self.ros2_node.create_publisher(Odometry, quadrotor.name_space + '/odom', 10)
 
             # Load robot into simulation
-            robot_cfg = quadrotor.ISAAC_SIM_CFG.replace(prim_path=f"/World{quadrotor.name_space}/OmniNxt")
-            robot_cfg.spawn.func(f"/World{quadrotor.name_space}/OmniNxt", robot_cfg.spawn, translation=robot_cfg.init_state.pos)
+            robot_cfg = quadrotor.ISAAC_SIM_CFG
             quadrotor.robot_instance_ = Articulation(robot_cfg)
             logging.info(f"OMNINXT robot_{quadrotor.id} spawned.")
 
             # Initialize robot controller
             quadrotor.controller_instance_ = Controller(self.ros2_node, quadrotor)
+
+            # Initialize sensors
+            quadrotor.initialize_sensors()
 
     def load_environment(self):
         """Load the warehouse environment into the simulation stage."""
@@ -152,7 +154,7 @@ class UAVSimulation:
         """
         msg = Odometry()
         msg.header.stamp = self.ros2_node.get_clock().now().to_msg()
-        msg.header.frame_id = "odom"
+        msg.header.frame_id = "map"
 
         # Position
         msg.pose.pose.position.x = robot_data_dict["root_pos_w"][0].item()
