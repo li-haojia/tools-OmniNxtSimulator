@@ -30,7 +30,7 @@ from vehicles.omninxt import OmniNxt
 
 def main():
     """Main entry point for the simulation."""
-    quadrotor = OmniNxt(id=0, init_pos=(0.0, 0.5, 0.8), enable_cameras=True)
+    quadrotor = OmniNxt(id=0, init_pos=(0.0, 0.5, 0.8), enable_cameras_pub=True)
     quadrotors = [quadrotor]
     simulation = UAVSimulation(simulation_app, quadrotors)
     simulation.run()

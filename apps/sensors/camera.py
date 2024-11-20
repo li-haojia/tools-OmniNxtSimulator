@@ -45,8 +45,8 @@ class ROS2Camera:
         self.quaternion = config.get("quaternion", [1.0, 0.0, 0.0, 0.0])
         self.camera_model = config.get("camera_model", "pinhole")
         self.resolution = config.get("resolution", [1280, 720])
-        self.focal_length = config.get("focal_length", 400.0)
-        self.fov = config.get("fov", 90.0)
+        self.focal_length = config.get("focal_length", 50.0)
+        self.fov = config.get("fov", 220.0)
         self.types = config.get("types", ['rgb', 'depth'])
         self.publish_labels = config.get("publish_labels", False)
         self.namespace = config.get("namespace", "")
@@ -85,13 +85,12 @@ class ROS2Camera:
                 polynomial = [0.0, 0.0, 0.0, 0.0, 0.0]
             )
         elif self.camera_model == "pinhole":
+            self.camera.set_projection_type("pinhole")
             self.camera.set_focal_length(self.focal_length)
+            if self.camera.get_focal_length() != self.focal_length:
+                carb.log_error(f"Failed to set focal length to {self.focal_length}")
 
         self.camera.initialize()
-
-        if not is_prim_path_valid(self.camera_prim_path):
-            carb.log_error(f"Invalid camera prim path: {self.camera_prim_path}")
-            return
 
         graph_path = f"{self.camera_prim_path}_pub"
         graph_specs = {
@@ -101,29 +100,22 @@ class ROS2Camera:
         keys = og.Controller.Keys
         graph_config = {
             keys.CREATE_NODES: [
-                ("on_tick", "omni.graph.action.OnTick"),
-                ("create_viewport", "omni.isaac.core_nodes.IsaacCreateViewport"),
-                ("get_render_product", "omni.isaac.core_nodes.IsaacGetViewportRenderProduct"),
-                ("set_viewport_resolution", "omni.isaac.core_nodes.IsaacSetViewportResolution"),
-                ("set_camera", "omni.isaac.core_nodes.IsaacSetCameraOnRenderProduct"),
+                ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
+                ("isaac_create_render_product", "omni.isaac.core_nodes.IsaacCreateRenderProduct"),
                 ("camera_info_helper", "omni.isaac.ros2_bridge.ROS2CameraInfoHelper"),
             ],
             keys.CONNECT: [
-                ("on_tick.outputs:tick", "create_viewport.inputs:execIn"),
-                ("create_viewport.outputs:execOut", "get_render_product.inputs:execIn"),
-                ("create_viewport.outputs:viewport", "get_render_product.inputs:viewport"),
-                ("create_viewport.outputs:execOut", "set_viewport_resolution.inputs:execIn"),
-                ("create_viewport.outputs:viewport", "set_viewport_resolution.inputs:viewport"),
-                ("set_viewport_resolution.outputs:execOut", "set_camera.inputs:execIn"),
-                ("get_render_product.outputs:renderProductPath", "set_camera.inputs:renderProductPath"),
-                ("set_camera.outputs:execOut", "camera_info_helper.inputs:execIn"),
-                ("get_render_product.outputs:renderProductPath", "camera_info_helper.inputs:renderProductPath"),
+                ("on_playback_tick.outputs:tick", "isaac_create_render_product.inputs:execIn"),
+                ("isaac_create_render_product.outputs:execOut", "camera_info_helper.inputs:execIn"),
+                ("isaac_create_render_product.outputs:renderProductPath", "camera_info_helper.inputs:renderProductPath"),
             ],
             keys.SET_VALUES: [
-                ("create_viewport.inputs:viewportId", 0),
-                ("create_viewport.inputs:name", f"{self.namespace}/camera_{self.id}"),
-                ("set_viewport_resolution.inputs:width", self.resolution[0]),
-                ("set_viewport_resolution.inputs:height", self.resolution[1]),
+                # isaac_create_render_product
+                ("isaac_create_render_product.inputs:cameraPrim", f"{self.camera_prim_path}"),
+                ("isaac_create_render_product.inputs:enabled", True),
+                ("isaac_create_render_product.inputs:width", self.resolution[0]),
+                ("isaac_create_render_product.inputs:height", self.resolution[1]),
+                # camera_info_helper
                 ("camera_info_helper.inputs:nodeNamespace", self.namespace),
                 ("camera_info_helper.inputs:frameId", self.tf_frame_id),
                 ("camera_info_helper.inputs:topicName", f"{self.base_topic}/camera_info"),
@@ -136,8 +128,8 @@ class ROS2Camera:
                 (camera_helper_name, "omni.isaac.ros2_bridge.ROS2CameraHelper")
             ]
             graph_config[keys.CONNECT] += [
-                ("set_camera.outputs:execOut", f"{camera_helper_name}.inputs:execIn"),
-                ("get_render_product.outputs:renderProductPath", f"{camera_helper_name}.inputs:renderProductPath")
+                ("isaac_create_render_product.outputs:execOut", f"{camera_helper_name}.inputs:execIn"),
+                ("isaac_create_render_product.outputs:renderProductPath", f"{camera_helper_name}.inputs:renderProductPath")
             ]
             graph_config[keys.SET_VALUES] += [
                 (f"{camera_helper_name}.inputs:nodeNamespace", self.namespace),
@@ -155,13 +147,6 @@ class ROS2Camera:
         (graph, _, _, _) = og.Controller.edit(
             graph_specs,
             graph_config
-        )
-
-        # Connect camera to the graphs
-        set_targets(
-            prim=stage.get_current_stage().GetPrimAtPath(f"{graph_path}/set_camera"),
-            attribute="inputs:cameraPrim",
-            target_prim_paths=[self.camera_prim_path]
         )
 
         # Run the ROS Camera graph once to generate ROS image publishers in SDGPipeline

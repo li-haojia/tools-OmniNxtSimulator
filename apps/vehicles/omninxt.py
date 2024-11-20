@@ -73,8 +73,22 @@ class OmniNxt(Quadrotor):
     def define_sensors(self):
         self.sensor_list_ = []
 
-        right_front_camera_config = {
+        mono_depth_camera_config = {
             "id": 0,
+            "sensor_base_path": self.sensor_base_path,
+            "position": [0.12, 0.0, 0.067],
+            "quaternion": [ 0.0, 0.0, 0.0, 1.0],
+            "camera_model": "pinhole",
+            "resolution": [100, 100],
+            "focal_length": 5.0,
+            "types": ['depth'],
+            "publish_labels": False,
+            "namespace": self.name_space,
+            "tf_frame_id": "map",
+        }
+
+        right_front_camera_config = {
+            "id": 1,
             "sensor_base_path": self.sensor_base_path,
             "position": [0.0735, -0.0735, 0.067],
             "quaternion": [  0.924, 0, 0, -0.383],
@@ -88,7 +102,7 @@ class OmniNxt(Quadrotor):
         }
 
         right_back_camera_config = {
-            "id": 1,
+            "id": 2,
             "sensor_base_path": self.sensor_base_path,
             "position": [-0.0735, -0.0735, 0.067],
             "quaternion": [ 0.383, 0, 0, -0.924],
@@ -102,7 +116,7 @@ class OmniNxt(Quadrotor):
         }
 
         left_back_camera_config = {
-            "id": 2,
+            "id": 3,
             "sensor_base_path": self.sensor_base_path,
             "position": [-0.0735, 0.0735, 0.067],
             "quaternion": [ 0.383, 0, 0, 0.924],
@@ -116,7 +130,7 @@ class OmniNxt(Quadrotor):
         }
 
         left_front_camera_config = {
-            "id": 3,
+            "id": 4,
             "sensor_base_path": self.sensor_base_path,
             "position": [0.0735, 0.0735, 0.067],
             "quaternion": [ 0.924, 0, 0, 0.383],
@@ -131,6 +145,7 @@ class OmniNxt(Quadrotor):
 
         if self.enable_cameras:
             self.sensor_list_ += [
+                ROS2Camera(mono_depth_camera_config),
                 ROS2Camera(right_front_camera_config),
                 ROS2Camera(right_back_camera_config),
                 ROS2Camera(left_back_camera_config),
