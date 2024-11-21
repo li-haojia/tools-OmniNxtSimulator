@@ -46,7 +46,7 @@ def generate_quadrotors(num_robots):
 
 def main():
     """Main entry point for the simulation."""
-    simulation = UAVSimulation(simulation_app, generate_quadrotors(9))
+    simulation = UAVSimulation(simulation_app, generate_quadrotors(4))
     simulation.run()
 
 

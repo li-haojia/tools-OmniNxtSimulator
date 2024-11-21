@@ -19,14 +19,11 @@ class OmniNxt(Quadrotor):
         "max_rpm": 35000.0, # rpm
     }
     enable_cameras = False
-
-    ISAAC_SIM_CFG = None
-    sensor_base_path = None
+    body_path = None
 
     def __init__(self, id, init_pos = (0.0, 0.0, 0.5), enable_cameras = False):
         super().__init__(id, self.config)
         self.enable_cameras = enable_cameras
-
         self.ISAAC_SIM_CFG = ArticulationCfg(
             prim_path=f"/World{self.name_space}/OmniNxt",
             spawn=sim_utils.UsdFileCfg(
@@ -66,8 +63,7 @@ class OmniNxt(Quadrotor):
             },
         )
 
-        self.sensor_base_path = self.ISAAC_SIM_CFG.prim_path + "/body/sensors"
-
+        self.body_path = self.ISAAC_SIM_CFG.prim_path + "/body"
         self.define_sensors()
 
     def define_sensors(self):
@@ -75,21 +71,20 @@ class OmniNxt(Quadrotor):
 
         mono_depth_camera_config = {
             "id": 0,
-            "sensor_base_path": self.sensor_base_path,
+            "body_path": self.body_path,
             "position": [0.12, 0.0, 0.067],
             "quaternion": [ 0.0, 0.0, 0.0, 1.0],
             "camera_model": "pinhole",
             "resolution": [100, 100],
-            "focal_length": 5.0,
-            "types": ['depth'],
+            "focal_length": 15.0 / 10, # mm to cm
+            "types": ['depth_pcl'],
             "publish_labels": False,
             "namespace": self.name_space,
-            "tf_frame_id": "map",
         }
 
         right_front_camera_config = {
             "id": 1,
-            "sensor_base_path": self.sensor_base_path,
+            "body_path": self.body_path,
             "position": [0.0735, -0.0735, 0.067],
             "quaternion": [  0.924, 0, 0, -0.383],
             "camera_model": "fisheye",
@@ -98,12 +93,11 @@ class OmniNxt(Quadrotor):
             "types": ['rgb', 'depth'],
             "publish_labels": False,
             "namespace": self.name_space,
-            "tf_frame_id": "map",
         }
 
         right_back_camera_config = {
             "id": 2,
-            "sensor_base_path": self.sensor_base_path,
+            "body_path": self.body_path,
             "position": [-0.0735, -0.0735, 0.067],
             "quaternion": [ 0.383, 0, 0, -0.924],
             "camera_model": "fisheye",
@@ -112,12 +106,11 @@ class OmniNxt(Quadrotor):
             "types": ['rgb', 'depth'],
             "publish_labels": False,
             "namespace": self.name_space,
-            "tf_frame_id": "map",
         }
 
         left_back_camera_config = {
             "id": 3,
-            "sensor_base_path": self.sensor_base_path,
+            "body_path": self.body_path,
             "position": [-0.0735, 0.0735, 0.067],
             "quaternion": [ 0.383, 0, 0, 0.924],
             "camera_model": "fisheye",
@@ -126,12 +119,11 @@ class OmniNxt(Quadrotor):
             "types": ['rgb', 'depth'],
             "publish_labels": False,
             "namespace": self.name_space,
-            "tf_frame_id": "map",
         }
 
         left_front_camera_config = {
             "id": 4,
-            "sensor_base_path": self.sensor_base_path,
+            "body_path": self.body_path,
             "position": [0.0735, 0.0735, 0.067],
             "quaternion": [ 0.924, 0, 0, 0.383],
             "camera_model": "fisheye",
@@ -140,7 +132,6 @@ class OmniNxt(Quadrotor):
             "types": ['rgb', 'depth'],
             "publish_labels": False,
             "namespace": self.name_space,
-            "tf_frame_id": "map",
         }
 
         if self.enable_cameras:

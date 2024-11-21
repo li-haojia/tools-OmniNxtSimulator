@@ -2,6 +2,8 @@ import threading
 import torch
 import logging
 import numpy as np
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import rclpy
 from rclpy.node import Node
@@ -17,6 +19,7 @@ from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 from omni.isaac.lab.app import AppLauncher
 
 from controller.controller import Controller
+from .tf import ROS2TFPub
 
 class UAVSimulation:
     """Class to handle OMNINXT simulation with ROS2 integration."""
@@ -75,6 +78,9 @@ class UAVSimulation:
 
             # Initialize robot controller
             quadrotor.controller_instance_ = Controller(self.ros2_node, quadrotor)
+
+            # Initialize ROS2 TF Publisher
+            ROS2TFPub(quadrotor.body_path)
 
             # Initialize sensors
             quadrotor.initialize_sensors()
@@ -154,7 +160,7 @@ class UAVSimulation:
         """
         msg = Odometry()
         msg.header.stamp = self.ros2_node.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
+        msg.header.frame_id = "world"
 
         # Position
         msg.pose.pose.position.x = robot_data_dict["root_pos_w"][0].item()
@@ -186,42 +192,62 @@ class UAVSimulation:
         self.reset_robot = False
         logging.info("Robot state has been reset.")
 
+    def pre_simulation_robot(self, robot):
+        # Apply external forces and torques
+        robot.controller_instance_.run_control()
+        forces = torch.zeros((1, 4, 3), device=self.sim.device)
+        torques = torch.zeros_like(forces)
+
+        forces[0, :, 2] = torch.tensor(robot.prop_forces)
+        torques[0, :, 2] = torch.tensor(robot.prop_torques)
+
+        prop_body_ids = robot.robot_instance_.find_bodies("rotor.*")[0]
+        robot.robot_instance_.set_external_force_and_torque(forces, torques, body_ids=prop_body_ids)
+        robot.robot_instance_.write_data_to_sim()
+
+    def pre_simulation(self):
+        pre_simulate_start =  time.time()
+        for robot in self.quadrotors:
+            self.pre_simulation_robot(robot)
+        pre_simulate_end =  time.time()
+        # print(f"Pre-simulate time(ms): {(pre_simulate_end - pre_simulate_start) * 1000}")
+
+    def post_simulation(self):
+        sim_dt = self.sim.get_physics_dt()
+        post_simulate_start =  time.time()
+        with ThreadPoolExecutor() as executor:
+            for robot in self.quadrotors:
+                robot.robot_instance_.update(sim_dt)
+                # Retrieve current robot data
+                robot_data_dict = self.get_robot_data(robot.robot_instance_)
+                # Publish robot data to ROS2
+                robot.update_state(
+                    robot_data_dict["root_pos_w"].cpu().numpy(),
+                    robot_data_dict["root_quat_w"].cpu().numpy(),
+                    robot_data_dict["root_lin_vel_w"].cpu().numpy(),
+                    robot_data_dict["root_ang_vel_w"].cpu().numpy()
+                )
+            executors = [
+                executor.submit(self.send_robot_data_by_ros2, robot.ros2_odom_publisher_, robot_data_dict)
+                for robot in self.quadrotors
+            ]
+        post_simulate_end =  time.time()
+        # print(f"Post-simulate time(ms): {(post_simulate_end - post_simulate_start) * 1000}")
+
     def run_simulation_loop(self):
         """Run the main simulation loop."""
         logging.info("Starting simulation loop.")
 
         try:
             while self.simulation_app.is_running():
-
-                # Apply external forces and torques
-                for quadrotor in self.quadrotors:
-                    quadrotor.controller_instance_.run_control()
-                    forces = torch.zeros((1, 4, 3), device=self.sim.device)
-                    torques = torch.zeros_like(forces)
-
-                    forces[0, :, 2] = torch.tensor(quadrotor.prop_forces)
-                    torques[0, :, 2] = torch.tensor(quadrotor.prop_torques)
-
-                    prop_body_ids = quadrotor.robot_instance_.find_bodies("rotor.*")[0]
-                    quadrotor.robot_instance_.set_external_force_and_torque(forces, torques, body_ids=prop_body_ids)
-                    quadrotor.robot_instance_.write_data_to_sim()
+                # Pre-simulation
+                self.pre_simulation()
 
                 # Step the simulation
                 self.sim.step()
-                sim_dt = self.sim.get_physics_dt()
 
-                for quadrotor in self.quadrotors:
-                    quadrotor.robot_instance_.update(sim_dt)
-                    # Retrieve current robot data
-                    robot_data_dict = self.get_robot_data(quadrotor.robot_instance_)
-                    # Publish robot data to ROS2
-                    quadrotor.update_state(
-                        robot_data_dict["root_pos_w"].cpu().numpy(),
-                        robot_data_dict["root_quat_w"].cpu().numpy(),
-                        robot_data_dict["root_lin_vel_w"].cpu().numpy(),
-                        robot_data_dict["root_ang_vel_w"].cpu().numpy()
-                    )
-                    self.send_robot_data_by_ros2(quadrotor.ros2_odom_publisher_, robot_data_dict)
+                # Post-simulation
+                self.post_simulation()
 
                 # Handle robot reset if requested
                 if self.reset_robot:

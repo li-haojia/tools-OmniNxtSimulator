@@ -1,14 +1,12 @@
 import carb
-
-from omni.isaac.core.utils import stage
 import omni.graph.core as og
-from omni.isaac.core.utils.prims import is_prim_path_valid
-from omni.isaac.core.utils.prims import set_targets
 from omni.isaac.sensor import Camera
+
+from simulator.tf import ROS2StaticTFPub
 
 FishEyeConfig = {
     "id": 0,
-    "sensor_base_path": "",
+    "body_path": "",
     "position": [0.0, 0.0, 0.0],
     "quaternion": [1.0, 0.0, 0.0, 0.0],
     "camera_model": "fisheye",
@@ -18,14 +16,14 @@ FishEyeConfig = {
     "types": ['rgb', 'depth'],
     "publish_labels": False,
     "namespace": "",
-    "tf_frame_id": "map",
+    "tf_frame_id": "",
 }
 
 class ROS2Camera:
     '''
     config = {
         "id": 0,                                    # sensor id
-        "sensor_base_path": "",                     # base path for the sensor
+        "body_path": "",                     # base path for the sensor
         "position": [0.0, 0.0, 0.0],                # position of the camera in the body frame
         "quaternion": [0.0, 0.0, 0.0, 1.0],         # orientation of the camera in the body frame
         "camera_model": "fisheye",                   # camera model (fisheye, pinhole)
@@ -40,7 +38,8 @@ class ROS2Camera:
     camera = None
     def __init__(self, config: dict):
         self.id = config.get("id", 0)
-        self.camera_prim_path = config.get("sensor_base_path", "") + f"/camera_{self.id}"
+        self.body_path = config.get("body_path", "")
+        self.camera_prim_path = self.body_path + f"/sensors/camera_{self.id}"
         self.position = config.get("position", [0.0, 0.0, 0.0])
         self.quaternion = config.get("quaternion", [1.0, 0.0, 0.0, 0.0])
         self.camera_model = config.get("camera_model", "pinhole")
@@ -50,7 +49,7 @@ class ROS2Camera:
         self.types = config.get("types", ['rgb', 'depth'])
         self.publish_labels = config.get("publish_labels", False)
         self.namespace = config.get("namespace", "")
-        self.tf_frame_id = config.get("tf_frame_id", "")
+        self.tf_frame_id = config.get("tf_frame_id", f"camera_{self.id}")
         self.base_topic = f"camera_{self.id}"
 
         self.check_params()
@@ -91,6 +90,7 @@ class ROS2Camera:
                 carb.log_error(f"Failed to set focal length to {self.focal_length}")
 
         self.camera.initialize()
+        ROS2StaticTFPub(self.camera_prim_path, self.body_path.split("/")[-1], self.tf_frame_id, self.position, [self.quaternion[1], self.quaternion[2], self.quaternion[3], self.quaternion[0]])
 
         graph_path = f"{self.camera_prim_path}_pub"
         graph_specs = {
