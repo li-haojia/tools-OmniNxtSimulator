@@ -5,6 +5,7 @@ from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from .quadrotor import Quadrotor
 from sensors.camera import ROS2Camera
+from sensors.lidar import ROS2Lidar
 
 class OmniNxt(Quadrotor):
 
@@ -134,6 +135,24 @@ class OmniNxt(Quadrotor):
             "namespace": self.name_space,
         }
 
+        lidar_config = {
+            "id": 5,
+            "body_path": self.body_path,
+            "position": [0.0, 0.0, 0.07],
+            "quaternion": [0.0, 0.0, 0.0, 1.0],
+            "config_file": "Hesai_XT32_SD10",
+            "namespace": self.name_space,
+        }
+
+        radar_config = {
+            "id": 6,
+            "body_path": self.body_path,
+            "position": [0.0, 0.0, 0.07],
+            "quaternion": [0.0, 0.0, 0.0, 1.0],
+            "config_file": "Example",
+            "namespace": self.name_space,
+        }
+
         if self.enable_cameras:
             self.sensor_list_ += [
                 ROS2Camera(mono_depth_camera_config),
@@ -142,3 +161,5 @@ class OmniNxt(Quadrotor):
                 ROS2Camera(left_back_camera_config),
                 ROS2Camera(left_front_camera_config),
             ]
+
+        self.sensor_list_ += [ROS2Lidar(lidar_config)]
