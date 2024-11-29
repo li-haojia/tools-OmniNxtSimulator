@@ -18,6 +18,7 @@ simulation_app = app_launcher.app
 
 # Enable ROS2 bridge extension
 from omni.isaac.core.utils import extensions
+from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 extensions.enable_extension("omni.isaac.ros2_bridge")
 
 # Configure logging
@@ -46,7 +47,13 @@ def generate_quadrotors(num_robots):
 
 def main():
     """Main entry point for the simulation."""
-    simulation = UAVSimulation(simulation_app, generate_quadrotors(4))
+    env_usd_paths = [
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
+        f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/TowerDemopack/World_TowerDemopack.usd",
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd",
+    ]
+    simulation = UAVSimulation(simulation_app, env_usd_paths, generate_quadrotors(4))
     simulation.run()
 
 

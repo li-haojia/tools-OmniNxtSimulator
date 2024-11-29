@@ -10,13 +10,16 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Odometry
 
+import omni
 import omni.isaac.lab.sim as sim_utils
 from omni.isaac.core import World
 from omni.isaac.core.utils.stage import add_reference_to_stage
+import omni.isaac.core.utils.stage as stage_utils
 from omni.isaac.lab.assets import Articulation
 from omni.isaac.lab.sim import SimulationContext
 from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 from omni.isaac.lab.app import AppLauncher
+from pxr import UsdGeom, Usd
 
 from controller.controller import Controller
 from .tf import ROS2TFPub
@@ -24,7 +27,7 @@ from .tf import ROS2TFPub
 class UAVSimulation:
     """Class to handle OMNINXT simulation with ROS2 integration."""
 
-    def __init__(self, simulation_app, quadrotors = []):
+    def __init__(self, simulation_app, env_usd_paths = [], quadrotors = []):
         """Initialize the simulation and ROS2 components.
 
         Args:
@@ -52,6 +55,7 @@ class UAVSimulation:
         self.ros2_node = rclpy.create_node('omninxt_sim')
 
         # Load environment
+        self.env_usd_paths = env_usd_paths
         self.load_environment()
 
         # Thread synchronization
@@ -87,10 +91,23 @@ class UAVSimulation:
 
     def load_environment(self):
         """Load the warehouse environment into the simulation stage."""
-        env_usd_path = f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd"
-        # env_usd_path = f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd"
-        add_reference_to_stage(env_usd_path, "/World/Environment")
-        logging.info("Environment loaded.")
+        if len(self.env_usd_paths) == 0:
+            logging.warning("No environment USD file provided, using default environment.")
+            self.env_usd_paths = [f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd"]
+
+        for env_usd_path in self.env_usd_paths:
+            prim_path = f"/World/Environment/{env_usd_path.split('/')[-1].split('.')[0]}"
+            print(prim_path)
+            add_reference_to_stage(env_usd_path, prim_path)
+            stage = Usd.Stage.Open(env_usd_path)
+            unit = UsdGeom.GetStageMetersPerUnit(stage)
+            logging.info(f"Stage unit: {unit}")
+            stage = omni.usd.get_context().get_stage()
+            root_prim = stage.GetPrimAtPath(prim_path)
+            xform = UsdGeom.Xformable(root_prim)
+            xform.AddScaleOp().Set((unit, unit, unit))
+        
+        logging.info("Environment loaded into the simulation.")
 
     def prepare_simulation(self):
         """Initialize simulation parameters and reset the simulation."""

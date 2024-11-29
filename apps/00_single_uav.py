@@ -17,6 +17,7 @@ app_launcher = AppLauncher(parse_arguments())
 simulation_app = app_launcher.app
 
 # Enable ROS2 bridge extension
+from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 from omni.isaac.core.utils import extensions
 extensions.enable_extension("omni.isaac.ros2_bridge")
 
@@ -30,10 +31,17 @@ from vehicles.omninxt import OmniNxt
 
 def main():
     """Main entry point for the simulation."""
-    quadrotors = [
-        OmniNxt(id=0, init_pos=(0.0, 0.5, 0.8), enable_cameras=True)
+        
+    env_usd_paths = [
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
+        f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/TowerDemopack/World_TowerDemopack.usd",
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd",
     ]
-    simulation = UAVSimulation(simulation_app, quadrotors)
+    quadrotors = [
+        OmniNxt(id=0, init_pos=(0.0, 0.0, 2), enable_cameras=True)
+    ]
+    simulation = UAVSimulation(simulation_app, env_usd_paths, quadrotors)
     simulation.run()
 
 
