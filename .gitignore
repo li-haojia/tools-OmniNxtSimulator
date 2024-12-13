@@ -1,3 +1,7 @@
 log
 *.AppImage
 */**/__pycache__
+assets
+data
+logs
+outputs
