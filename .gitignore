@@ -2,6 +2,7 @@ log
 *.AppImage
 */**/__pycache__
 ./assets
+apps/assets
 data
 logs
 outputs
