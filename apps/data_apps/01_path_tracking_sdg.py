@@ -68,15 +68,12 @@ config = {
         "rgb": True,
         "distance_to_camera": True,
         "colorize_depth": True,
-        "instance_id_segmentation": True,
-        "colorize_instance_id_segmentation": True,
         "instance_segmentation": True,
         "colorize_instance_segmentation": True,
         "semantic_segmentation": True,
         "colorize_semantic_segmentation": True,
         "bounding_box_2d_tight": True,
         "bounding_box_3d": True,
-        "occlusion": True,
     },
     "clear_previous_semantics": False,
     "close_app_after_run": True,
@@ -117,10 +114,7 @@ import omni.usd
 
 import data_apps.synthetic_data.scene_based_sdg_utils as scene_based_sdg_utils
 from data_apps.synthetic_data.path_tracking_sdg_utils import TrajectoryDatabase
-import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.actuators import ImplicitActuatorCfg
-from omni.isaac.lab.assets import ArticulationCfg
-from omni.isaac.lab.assets import Articulation
+from omni.physx.scripts import physicsUtils
 from omni.isaac.core.utils import prims
 from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles, quat_to_rot_matrix
 from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths
@@ -128,7 +122,7 @@ from omni.isaac.core.utils.semantics import count_semantics_in_scene
 from omni.isaac.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pxr import Gf
+from pxr import UsdGeom, Gf, UsdPhysics
 
 WRITE_THREADS = 64
 QUEUE_SIZE = 1000
@@ -164,6 +158,8 @@ cameras_xform = rep.create.xform(
     name="cameras",
     parent="/World_custom"
 )
+cameras_xform_path = '/World_custom/cameras'
+cameras_xform_prim = stage.GetPrimAtPath(cameras_xform_path)
 
 # Create cameras and render products
 camera_prims = []
@@ -245,18 +241,28 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         timestamp = trajectory.getTimestamp()[sample_counter]
         position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
         orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+        rotation = quat_to_euler_angles(orientation) * 180 / math.pi
         velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
         omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
 
-        with cameras_xform:
-            rep.modify.pose(
-                position=position,
-                rotation=quat_to_euler_angles(orientation) * 180 / math.pi,
-            )
-            rep.physics.rigid_body(
-                velocity=(float(velocity[0]), float(velocity[1]), float(velocity[2])),
-                angular_velocity=(float(omega[0]), float(omega[1]), float(omega[2])),
-            )
+        # with cameras_xform:
+        #     rep.modify.pose(
+        #         position=position,
+        #         rotation=quat_to_euler_angles(orientation) * 180 / math.pi,
+        #     )
+        #     rep.physics.rigid_body(
+        #         velocity=(float(velocity[0]), float(velocity[1]), float(velocity[2])),
+        #         angular_velocity=(float(omega[0]), float(omega[1]), float(omega[2])),
+        #     )
+        
+        xform_api = UsdGeom.Xformable(cameras_xform_prim)
+        xform_api.ClearXformOpOrder()
+        xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
+        xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
+
+        physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
+        physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
+        physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
 
         # Update the physics state
         next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
