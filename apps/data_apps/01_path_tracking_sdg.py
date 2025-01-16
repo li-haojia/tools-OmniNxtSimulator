@@ -13,9 +13,9 @@ from isaacsim import SimulationApp
 config = {
     "launch_config": {
         "renderer": "RayTracedLighting",
-        "headless": True,
+        "headless": False,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/trajectory_small.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/data/full_warehouse/trajectory_small.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -59,24 +59,25 @@ config = {
             },
         ],
     },
-    "rt_subframes": 50,
+    "rt_subframes": 16,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/data_apps/output/path_tracking_sdg",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/data/full_warehouse/images",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
-        "colorize_depth": True,
-        "instance_segmentation": True,
-        "colorize_instance_segmentation": True,
-        "semantic_segmentation": True,
-        "colorize_semantic_segmentation": True,
-        "bounding_box_2d_tight": True,
-        "bounding_box_3d": True,
+        "colorize_depth": False,
+        "instance_segmentation": False,
+        "colorize_instance_segmentation": False,
+        "semantic_segmentation": False,
+        "colorize_semantic_segmentation": False,
+        "bounding_box_2d_tight": False,
+        "bounding_box_3d": False,
     },
+    "save_trajectory_info": True,
     "clear_previous_semantics": False,
-    "close_app_after_run": True,
+    "close_app_after_run": False,
 }
 
 import carb
@@ -122,7 +123,7 @@ from omni.isaac.core.utils.semantics import count_semantics_in_scene
 from omni.isaac.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pxr import UsdGeom, Gf, UsdPhysics
+from pxr import UsdGeom, Gf, UsdPhysics, PhysxSchema
 
 WRITE_THREADS = 64
 QUEUE_SIZE = 1000
@@ -164,6 +165,7 @@ cameras_xform_prim = stage.GetPrimAtPath(cameras_xform_path)
 # Create cameras and render products
 camera_prims = []
 render_products = []
+each_camera_xform_prim_paths = []
 for camera_config in config["robot"]["cameras"]:
     rotation_euler = quat_to_euler_angles(camera_config["quaternion"]) * (180 / math.pi)
     projection_type = (
@@ -186,7 +188,8 @@ for camera_config in config["robot"]["cameras"]:
         resolution=camera_config["resolution"],
         name=camera_config["name"],
     )
-    render_product.hydra_texture.set_updates_enabled(False)
+    each_camera_xform_prim_paths.append(cameras_xform_path + "/" + camera_config["name"]+"_Xform")
+    render_product.hydra_texture.set_updates_enabled(True)
     camera_prims.append(camera_prim)
     render_products.append(render_product)
 
@@ -203,17 +206,61 @@ rt_subframes = config.get("rt_subframes", -1)
 # Set replicator settings (capture only on request and enable motion blur)
 carb.settings.get_settings().set("/omni/replicator/captureOnPlay", False)
 carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", True)
-print(f"[MotionBlur] Setting RayTracedLighting render mode motion blur settings")
-# Setup ray tracing motion blur settings
-carb.settings.get_settings().set("/rtx/rendermode", "RayTracedLighting")
-# 0: Disabled, 1: TAA, 2: FXAA, 3: DLSS, 4:RTXAA
-carb.settings.get_settings().set("/rtx/post/aa/op", 3)
-# (float): The fraction of the largest screen dimension to use as the maximum motion blur diameter.
-carb.settings.get_settings().set("/rtx/post/motionblur/maxBlurDiameterFraction", 0.02)
-# (float): Exposure time fraction in frames (1.0 = one frame duration) to sample.
-carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
-# (int): Number of samples to use in the filter. A higher number improves quality at the cost of performance.
-carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 8)
+if config["launch_config"]["renderer"] == "RayTracedLighting":
+    print(f"[MotionBlur] Setting RayTracedLighting render mode motion blur settings")
+    # Setup ray tracing motion blur settings
+    carb.settings.get_settings().set("/rtx/rendermode", "RayTracedLighting")
+    # 0: Disabled, 1: TAA, 2: FXAA, 3: DLSS, 4:RTXAA
+    carb.settings.get_settings().set("/rtx/post/aa/op", 3)
+    # (float): The fraction of the largest screen dimension to use as the maximum motion blur diameter.
+    carb.settings.get_settings().set("/rtx/post/motionblur/maxBlurDiameterFraction", 0.1)
+    # (float): Exposure time fraction in frames (1.0 = one frame duration) to sample.
+    carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
+    # (int): Number of samples to use in the filter. A higher number improves quality at the cost of performance.
+    carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 4)
+else:
+    print(f"[MotionBlur] Setting PathTracing render mode motion blur settings")
+    carb.settings.get_settings().set("/rtx/rendermode", "PathTracing")
+    # (int): Total number of samples for each rendered pixel, per frame.
+    carb.settings.get_settings().set("/rtx/pathtracing/spp", 64)
+    # (int): Maximum number of samples to accumulate per pixel. When this count is reached the rendering stops until a scene or setting change is detected, restarting the rendering process. Set to 0 to remove this limit.
+    carb.settings.get_settings().set("/rtx/pathtracing/totalSpp", 64)
+    carb.settings.get_settings().set("/rtx/pathtracing/optixDenoiser/enabled", 0)
+    # Number of sub samples to render if in PathTracing render mode and motion blur is enabled.
+    carb.settings.get_settings().set("/omni/replicator/pathTracedMotionBlurSubSamples", 4)
+   
+# Enables rigid body dynamics (physics simulation) on the prim
+def enable_dynamics(prim, disable_gravity=False, angular_damping=None):
+    # Physics
+    if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        rigid_body_api = UsdPhysics.RigidBodyAPI.Apply(prim)
+    else:
+        rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+    rigid_body_api.CreateRigidBodyEnabledAttr(True)
+    # PhysX
+    if not prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+        physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+    else:
+        physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI(prim)
+    physx_rigid_body_api.GetDisableGravityAttr().Set(disable_gravity)
+    if angular_damping is not None:
+        physx_rigid_body_api.CreateAngularDampingAttr().Set(angular_damping)
+      
+physx_scene = None
+for prim in stage.Traverse():
+    if prim.IsA(UsdPhysics.Scene):
+        physx_scene = PhysxSchema.PhysxSceneAPI.Apply(prim)
+        break
+if physx_scene is None:
+    print(f"[MotionBlur] Creating a new PhysicsScene")
+    physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+    physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
+
+
+enable_dynamics(cameras_xform_prim, disable_gravity=True)
+for camera_prim_path in each_camera_xform_prim_paths:
+    print(camera_prim_path)
+    enable_dynamics(stage.GetPrimAtPath(camera_prim_path), disable_gravity=True)
 
 # Start the SDG
 # Enable the render products for SDG
@@ -235,15 +282,16 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
     # Load the trajectory for the current group
     trajectory = db.getTrajectory(group_num)
     interval = config.get("sample_interval", 100)
+    used_samples = []
     for sample_counter in range(len(trajectory)):
         if sample_counter % interval != 0:
             continue
         timestamp = trajectory.getTimestamp()[sample_counter]
-        position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
-        orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+        position = trajectory.getPosbyIndex(sample_counter)  # numpy array
+        orientation = trajectory.getQuaternionbyIndex(sample_counter) # numpy array [w, x, y, z]
         rotation = quat_to_euler_angles(orientation) * 180 / math.pi
-        velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
-        omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
+        velocity = trajectory.getVelbyIndex(sample_counter) # numpy array
+        omega = trajectory.getOmgbyIndex(sample_counter) * 180 / math.pi  # numpy array
 
         # with cameras_xform:
         #     rep.modify.pose(
@@ -260,9 +308,11 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
         xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
 
-        physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
-        physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
-        physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
+        # physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
+        # physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
+        # physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
+        cameras_xform_prim.GetAttribute("physics:velocity").Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
+        cameras_xform_prim.GetAttribute("physics:angularVelocity").Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
 
         # Update the physics state
         next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
@@ -270,7 +320,16 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         start_time = time.time()
         rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
         print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
-
+        used_samples.append(sample_counter)
+    
+    # Save the trajectory information
+    if config.get("save_trajectory_info", True):
+        trajectory_info = {
+            "group_num": group_num,
+            "used_samples": used_samples,
+        }
+        with open(os.path.join(writer_kwargs["output_dir"], "trajectory_info.json"), "w") as f:
+            json.dump(trajectory_info, f)
     # Wait for the data to be written to disk
     rep.orchestrator.wait_until_complete()
     # Cleanup the writer
