@@ -1,6 +1,8 @@
 import argparse
+import asyncio
 import json
 import math
+import time
 import os
 import random
 
@@ -13,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/trajectory.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/trajectory_small.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -57,7 +59,7 @@ config = {
             },
         ],
     },
-    "rt_subframes": 100,
+    "rt_subframes": 50,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "BasicWriter",
     "writer_config": {
@@ -128,6 +130,11 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from pxr import Gf
 
+WRITE_THREADS = 64
+QUEUE_SIZE = 1000
+rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
+rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
+
 assets_root_path = get_assets_root_path()
 if assets_root_path is None:
     carb.log_error("Could not get nucleus server path, closing application..")
@@ -162,30 +169,27 @@ cameras_xform = rep.create.xform(
 camera_prims = []
 render_products = []
 for camera_config in config["robot"]["cameras"]:
-    if(camera_config["camera_model"] == "fisheye"):
-        camera_prim = rep.create.camera(
-            position=camera_config["position"],
-            rotation=quat_to_euler_angles(camera_config["quaternion"]) * 180 / math.pi,
-            projection_type="fisheye_polynomial",
-            fisheye_max_fov=camera_config["fov"],
-            name=camera_config["name"],
-            parent="/World_custom/cameras",
-        )
+    rotation_euler = quat_to_euler_angles(camera_config["quaternion"]) * (180 / math.pi)
+    projection_type = (
+        "fisheye_polynomial" if camera_config["camera_model"] == "fisheye" else "pinhole"
+    )
+    camera_kwargs = {
+        "position": camera_config["position"],
+        "rotation": rotation_euler,
+        "projection_type": projection_type,
+        "name": camera_config["name"],
+        "parent": "/World_custom/cameras",
+    }
+    if projection_type == "fisheye_polynomial":
+        camera_kwargs["fisheye_max_fov"] = camera_config["fov"]
     else:
-        camera_prim = rep.create.camera(
-            position=camera_config["position"],
-            rotation=quat_to_euler_angles(camera_config["quaternion"]) * 180 / math.pi,
-            projection_type="pinhole",
-            focal_length=camera_config["focal_length"],
-            name=camera_config["name"],
-            parent="/World_custom/cameras",
-        )
+        camera_kwargs["focal_length"] = camera_config["focal_length"]
+    camera_prim = rep.create.camera(**camera_kwargs)
     render_product = rep.create.render_product(
         camera_prim,
         resolution=camera_config["resolution"],
         name=camera_config["name"],
     )
-    # Disable the render products until SDG to improve perf by avoiding unnecessary rendering
     render_product.hydra_texture.set_updates_enabled(False)
     camera_prims.append(camera_prim)
     render_products.append(render_product)
@@ -200,10 +204,6 @@ if writer_type not in rep.WriterRegistry.get_writers():
 # see: https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/subframes_examples.html
 rt_subframes = config.get("rt_subframes", -1)
 
-# Enable the render products for SDG
-for rp in render_products:
-    rp.hydra_texture.set_updates_enabled(True)
-
 # Set replicator settings (capture only on request and enable motion blur)
 carb.settings.get_settings().set("/omni/replicator/captureOnPlay", False)
 carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", True)
@@ -211,7 +211,7 @@ print(f"[MotionBlur] Setting RayTracedLighting render mode motion blur settings"
 # Setup ray tracing motion blur settings
 carb.settings.get_settings().set("/rtx/rendermode", "RayTracedLighting")
 # 0: Disabled, 1: TAA, 2: FXAA, 3: DLSS, 4:RTXAA
-carb.settings.get_settings().set("/rtx/post/aa/op", 2)
+carb.settings.get_settings().set("/rtx/post/aa/op", 3)
 # (float): The fraction of the largest screen dimension to use as the maximum motion blur diameter.
 carb.settings.get_settings().set("/rtx/post/motionblur/maxBlurDiameterFraction", 0.02)
 # (float): Exposure time fraction in frames (1.0 = one frame duration) to sample.
@@ -220,10 +220,14 @@ carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
 carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 8)
 
 # Start the SDG
+# Enable the render products for SDG
+for rp in render_products:
+    rp.hydra_texture.set_updates_enabled(True)
+
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
 db = TrajectoryDatabase(config["trajectory_path"])
-for group_num in range(db.__len__()):
+def process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes):
     # Setup the writer for the current group
     writer = rep.WriterRegistry.get(writer_type)
     writer_kwargs = config["writer_config"].copy()
@@ -234,18 +238,16 @@ for group_num in range(db.__len__()):
 
     # Load the trajectory for the current group
     trajectory = db.getTrajectory(group_num)
-    sample_counter = 0
     interval = config.get("sample_interval", 100)
     for sample_counter in range(len(trajectory)):
         if sample_counter % interval != 0:
             continue
         timestamp = trajectory.getTimestamp()[sample_counter]
-        print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp}")
-        position = trajectory.getPosbyTimestamp(timestamp) # numpy array
-        orientation = trajectory.getQuaternionbyTimestamp(timestamp) # numpy array [w, x, y, z]
-        velocity = trajectory.getVelbyTimestamp(timestamp) # numpy array
-        omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi # numpy array
-        
+        position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
+        orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+        velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
+        omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
+
         with cameras_xform:
             rep.modify.pose(
                 position=position,
@@ -257,29 +259,39 @@ for group_num in range(db.__len__()):
             )
 
         # Update the physics state
-        next_timestamp = trajectory.getTimestamp()[sample_counter+1] if sample_counter+1 < len(trajectory) else timestamp
+        next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
         dt = next_timestamp - timestamp
+        start_time = time.time()
         rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
-        sample_counter += 1
+        print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
 
     # Wait for the data to be written to disk
     rep.orchestrator.wait_until_complete()
     # Cleanup the writer
     writer.detach()
 
-# Cleanup render products
-for rp in render_products:
-    rp.destroy()
+def main():
+    # Process each group in a separate process
+    for group_num in range(len(db)):
+        process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes)
 
-# Check if the application should keep running after the data generation (debug purposes)
-close_app_after_run = config.get("close_app_after_run", True)
-if config["launch_config"]["headless"]:
-    if not close_app_after_run:
-        print(
-            "[scene_based_sdg] 'close_app_after_run' is ignored when running headless. The application will be closed."
-        )
-elif not close_app_after_run:
-    print("[scene_based_sdg] The application will not be closed after the run. Make sure to close it manually.")
-    while simulation_app.is_running():
-        simulation_app.update()
-simulation_app.close()
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        # Cleanup render products
+        for rp in render_products:
+            rp.destroy()
+
+        # Check if the application should keep running after the data generation (debug purposes)
+        close_app_after_run = config.get("close_app_after_run", True)
+        if config["launch_config"]["headless"]:
+            if not close_app_after_run:
+                print(
+                    "[scene_based_sdg] 'close_app_after_run' is ignored when running headless. The application will be closed."
+                )
+        elif not close_app_after_run:
+            print("[scene_based_sdg] The application will not be closed after the run. Make sure to close it manually.")
+            while simulation_app.is_running():
+                simulation_app.update()
+        simulation_app.close()
