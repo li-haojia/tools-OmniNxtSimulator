@@ -1,6 +1,6 @@
 # tools-OmniNxtSimulator
 
-OmniNxt simulator based on Isaac Lab
+[OmniNxt](https://hkust-aerial-robotics.github.io/OmniNxt/) simulator based on Isaac Lab
 
 ## Setup
 
@@ -82,3 +82,12 @@ This bridge will automatically map the ROS2 topics to ROS1 topics. This is usefu
 cd ros_bridge
 docker-compose up -d
 ```
+
+## Use cases
+
+| Script | Description | Visualization |
+| --- | --- | --- |
+| apps/00_single_uav.py | Single UAV simulation with position control and ROS2 interface | ![00_single_uav](https://wpcos-1300629776.cos.ap-chengdu.myqcloud.com/picgo/20250116-014615%402x.png) |
+| apps/01_multi_uav.py | Multi-UAV simulation with position control and ROS2 interface | ![01_multi_uav](https://wpcos-1300629776.cos.ap-chengdu.myqcloud.com/picgo/20250116-015052%402x.png)
+|apps/data_apps/00_object_based_sdg.py | Object-based SDG Generatior for 6D pose estimation | ![00_object_based_sdg](https://wpcos-1300629776.cos.ap-chengdu.myqcloud.com/picgo/000038_overlay.png) |
+| apps/data_apps/01_path_tracking_sdg.py | Path tracking SDG Generator for perception tasks | ![01_path_tracking_sdg](https://wpcos-1300629776.cos.ap-chengdu.myqcloud.com/picgo/20250116-020557.png) |
