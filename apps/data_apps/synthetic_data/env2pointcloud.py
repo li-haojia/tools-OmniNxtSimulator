@@ -1,3 +1,9 @@
+"""
+This script generates a 3D occupancy map using NVIDIA Omniverse Isaac Sim and saves it as a PCD file.
+Run the script using the following command:
+./gui.sh env2_pointcloud.py
+"""
+
 import omni
 import argparse
 from omni.isaac.lab.app import AppLauncher
@@ -51,7 +57,7 @@ def save_point_cloud_to_pcd(points, filename="environment_point_cloud.pcd"):
     print(f"Point cloud saved to {filename}")
 
 # function to generate and save occupancy map
-def generate_and_save_occupancy_map():
+def generate_and_save_occupancy_map(stage_path, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0), min_bound=(-2.0,-2.0,-0.5), max_bound=(2.0,2.0,2.0)):
     """
     Generate a 3D occupancy map using NVIDIA Omniverse Isaac Sim and save it as a PLY file.
     """
@@ -81,9 +87,8 @@ def generate_and_save_occupancy_map():
 
     # Configure the occupancy map generator
     cell_size = 0.2
-    # occupancy_map.set_cell_size(cell_size)
     occupancy_map.update_settings(cell_size, 1, 0, 0.5)
-    occupancy_map.set_transform((0.0, 0.0, 0.0), (-28.0, -25.0, -0.5), (9.0, 32.0, 9.5))
+    occupancy_map.set_transform(origin, min_bound, max_bound)
 
     context.step()
     print("Occupancy map generator configured")
@@ -105,4 +110,11 @@ def generate_and_save_occupancy_map():
 
 # Run the async function
 if __name__ == "__main__":
-    generate_and_save_occupancy_map()
+    path = f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd"
+    output_path = "occupancy_map.pcd"
+    cell_size = 0.2
+    origin = (0.0,0.0,0.0) # x y z
+    min_bound = (-28.0, -25.0, -0.5) # x y z
+    max_bound = (9.0, 32.0, 9.5) # x y z
+  
+    generate_and_save_occupancy_map(path, output_path, cell_size, origin, min_bound, max_bound)
