@@ -33,31 +33,56 @@ from omni.isaac.core.utils.stage import get_current_stage, add_reference_to_stag
 import omni.isaac.core.utils.stage as stage_utils
 from omni.isaac.lab.assets import Articulation
 from omni.isaac.lab.sim import SimulationContext
-from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 # Import necessary libraries
 import carb
 import numpy as np
-from pxr import UsdPhysics, Sdf
+from pxr import UsdPhysics, Sdf, Gf, UsdGeom, Usd
 from omni.isaac.occupancy_map.bindings import _occupancy_map
 from omni.isaac.core.utils.stage import open_stage
 from omni.isaac.nucleus import get_assets_root_path
 import os
-
-from pxr import UsdGeom, Usd
 import numpy as np
-import open3d as o3d  # 用于保存点云
+import textwrap
 
 def save_point_cloud_to_pcd(points, filename="environment_point_cloud.pcd"):
     """
-    Save point cloud as .pcd file
+    Save point cloud as a .pcd file in ASCII format.
+
+    Parameters:
+    - points (array-like): An iterable of points, where each point is an iterable of three coordinates (x, y, z).
+    - filename (str): The name of the file to save the point cloud to.
     """
-    point_cloud = o3d.geometry.PointCloud()
-    point_cloud.points = o3d.utility.Vector3dVector(points)
-    o3d.io.write_point_cloud(filename, point_cloud)
-    print(f"Point cloud saved to {filename}")
+    points = np.asarray(points, dtype=np.float32)
+    print(f"Points shape: {points.shape}")
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("Points array must be of shape (N, 3)")
+
+    num_points = points.shape[0]
+
+    header = textwrap.dedent(f"""\
+        # .PCD v0.7 - Point Cloud Data file format
+        VERSION 0.7
+        FIELDS x y z
+        SIZE 4 4 4
+        TYPE F F F
+        COUNT 1 1 1
+        WIDTH {num_points}
+        HEIGHT 1
+        VIEWPOINT 0 0 0 1 0 0 0
+        POINTS {num_points}
+        DATA ascii
+        """)
+
+    try:
+        with open(filename, 'w', encoding='utf-8') as file:
+            file.write(header)
+            np.savetxt(file, points, fmt="%.6f %.6f %.6f")
+        print(f"Point cloud saved to {filename}")
+    except IOError as e:
+        print(f"Failed to save point cloud to {filename}: {e}")
 
 # function to generate and save occupancy map
-def generate_and_save_occupancy_map(stage_path, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0), min_bound=(-2.0,-2.0,-0.5), max_bound=(2.0,2.0,2.0)):
+def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0), min_bound=(-2.0,-2.0,-0.5), max_bound=(2.0,2.0,2.0)):
     """
     Generate a 3D occupancy map using NVIDIA Omniverse Isaac Sim and save it as a PLY file.
     """
@@ -67,27 +92,42 @@ def generate_and_save_occupancy_map(stage_path, output_path,cell_size = 0.2, ori
         carb.log_error("Could not find Isaac Sim assets folder")
         return
 
-    # Load the Simple Room environment
-    stage_path = f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd" #os.path.join(assets_root_path, "Isaac/Environments/Simple_Room/simple_room.usd")
-    stage = open_stage(stage_path)
+    # Create a simulation context
+    context = SimulationContext(sim_utils.SimulationCfg(dt=0.1))
+
+    # Load the environment stage
+    for usd_path in usd_paths:
+        prim_path = f"/{usd_path.split('/')[-1].split('.')[0]}"
+        print(f"Loading stage at {prim_path}")
+        add_reference_to_stage(usd_path, prim_path)
+        stage = Usd.Stage.Open(usd_path)
+        unit = UsdGeom.GetStageMetersPerUnit(stage)
+        print(f"Stage unit: {unit}")
+        if unit != 1.0:
+            # Need to scale the stage to match the 1 unit = 1 meter
+            scale_vector = Gf.Vec3f(float(unit), float(unit), float(unit))
+            stage = omni.usd.get_context().get_stage()
+            root_prim = stage.GetPrimAtPath(prim_path)
+            xform = UsdGeom.Xformable(root_prim)
+            xform.AddScaleOp().Set(scale_vector)
 
     # Get the stage and define the physics scene
     # UsdPhysics.Scene.Define(stage, Sdf.Path("/World/physicsScene"))
     # print("Physics scene defined")
-    context = SimulationContext(sim_utils.SimulationCfg(dt=0.1))
     context_get = omni.usd.get_context()
     # Play the timeline to ensure physics is enabled
     physx = omni.physx.acquire_physx_interface()
+    stage_id = omni.usd.get_context().get_stage_id()
     timeline = omni.timeline.get_timeline_interface()
     timeline.play()
     context.step()
     print("Timeline playing")
-    occupancy_map = _occupancy_map.Generator(physx, context_get.get_stage_id())
+    occupancy_map = _occupancy_map.Generator(physx, stage_id)
     context.step()
 
     # Configure the occupancy map generator
     cell_size = 0.2
-    occupancy_map.update_settings(cell_size, 1, 0, 0.5)
+    occupancy_map.update_settings(cell_size, 1, 1, 0.5)
     occupancy_map.set_transform(origin, min_bound, max_bound)
 
     context.step()
@@ -105,16 +145,19 @@ def generate_and_save_occupancy_map(stage_path, output_path,cell_size = 0.2, ori
     print(f"Number of occupied points: {len(points)}")
 
     # Save the points to a PCD file
-    output_file_path = "occupancy_map.pcd"  # Replace with your desired file path
-    save_point_cloud_to_pcd(points, output_file_path)
+    save_point_cloud_to_pcd(points, output_path)
 
 # Run the async function
 if __name__ == "__main__":
-    path = f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd"
+    paths = [
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd",
+        f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd"
+    ]
     output_path = "occupancy_map.pcd"
     cell_size = 0.2
     origin = (0.0,0.0,0.0) # x y z
     min_bound = (-28.0, -25.0, -0.5) # x y z
     max_bound = (9.0, 32.0, 9.5) # x y z
-  
-    generate_and_save_occupancy_map(path, output_path, cell_size, origin, min_bound, max_bound)
+
+    generate_and_save_occupancy_map(paths, output_path, cell_size, origin, min_bound, max_bound)
