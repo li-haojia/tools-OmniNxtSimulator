@@ -13,9 +13,9 @@ from isaacsim import SimulationApp
 config = {
     "launch_config": {
         "renderer": "RayTracedLighting",
-        "headless": False,
+        "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/data/full_warehouse/trajectory_small.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/data/warehouse_with_forks/trajectory_small.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -42,6 +42,8 @@ config = {
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
+                "shutter_open": 0.0,
+                "shutter_close": 1.0,
             }, {
                 "name": "left_back_camera",
                 "position": [-0.0735, 0.0735, 0.067],
@@ -59,11 +61,11 @@ config = {
             },
         ],
     },
-    "rt_subframes": 16,
-    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+    "rt_subframes": 8,
+    "env_url": "/Isaac/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/assets/data/full_warehouse/images",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/data/warehouse_with_forks/images",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
@@ -318,7 +320,8 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
         dt = next_timestamp - timestamp
         start_time = time.time()
-        rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
+        dt = None
+        rep.orchestrator.step(rt_subframes=rt_subframes)
         print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
         used_samples.append(sample_counter)
     
