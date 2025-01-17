@@ -29,18 +29,33 @@ class Controller:
         self.control_data = msg
 
     def run_control(self):
+        # self.control_data.data
+        # [0] = control type (0: position, 1: velocity, 2: angular velocity)
+        # [1] = x, vx, omega_x
+        # [2] = y, vy, omega_y
+        # [3] = z, vz, omega_z
+        # [4] = yaw, yaw, throttle
+
         position_control_flag = False
+        velocity_control_flag = False
         angular_velocity_control_flag = False
 
-        if len(self.control_data.data) == 3:
+        if self.control_data.data[0] == 0:
             position_control_flag = True
-        elif len(self.control_data.data) == 4:
+        elif self.control_data.data[0] == 1:
+            velocity_control_flag = True
+        elif self.control_data.data[0] == 2:
             angular_velocity_control_flag = True
+        else:
+            print("Invalid control type. Please check the control command.")
+            return
 
         if position_control_flag:
-            forces, torques = self.controller.position_control(self.control_data.data[0], self.control_data.data[1], self.control_data.data[2])
+            forces, torques = self.controller.position_control(self.control_data.data[1], self.control_data.data[2], self.control_data.data[3], self.control_data.data[4])
+        elif velocity_control_flag:
+            forces, torques = self.controller.velocity_control(self.control_data.data[1], self.control_data.data[2], self.control_data.data[3], self.control_data.data[4])
         elif angular_velocity_control_flag:
-            forces, torques = self.controller.angular_velocity_control(self.control_data.data[0], self.control_data.data[1], self.control_data.data[2], self.control_data.data[3])
+            forces, torques = self.controller.angular_velocity_control(self.control_data.data[1], self.control_data.data[2], self.control_data.data[3], self.control_data.data[4])
         else:
             forces = np.zeros(4)
             torques = np.zeros(4)
