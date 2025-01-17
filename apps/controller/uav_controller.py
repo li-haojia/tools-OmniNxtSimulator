@@ -16,7 +16,7 @@ class UAVController:
         self.so3_control.set_mass(self.quadopter.mass_)
         self.so3_control.set_gravity(self.quadopter.gravity_)
 
-    def position_control(self, x, y, z):
+    def position_control(self, x, y, z, yaw):
         self.so3_control.set_position(self.quadopter.position_)
         self.so3_control.set_quaternion(self.quadopter.quaternion_[1],
                                         self.quadopter.quaternion_[2],
@@ -24,14 +24,28 @@ class UAVController:
                                         self.quadopter.quaternion_[0])
         self.so3_control.set_velocity(self.quadopter.linear_velocity_)
         self.so3_control.set_angular_velocity(self.quadopter.angular_velocity_)
-        self.so3_control.calculate_control([x, y, z], [0, 0, 0], 0, self.kx, self.kv)
+        self.so3_control.calculate_control([x, y, z], [0, 0, 0], yaw, self.kx, self.kv)
         throttle = self.so3_control.get_computed_throttle()
         tau_x, tau_y, tau_z = self.so3_control.get_computed_angular_velocity()
         forces, torques = self.get_px4_forces(throttle, tau_x, tau_y, tau_z)
         return forces, torques
 
-    def angular_velocity_control(self, ang_vel_x, ang_vel_y, ang_vel_z):
-        forces, torques = self.get_px4_forces(0, ang_vel_x, ang_vel_y, ang_vel_z)
+    def velocity_control(self, vx, vy, vz, yaw):
+        self.so3_control.set_position(self.quadopter.position_)
+        self.so3_control.set_quaternion(self.quadopter.quaternion_[1],
+                                        self.quadopter.quaternion_[2],
+                                        self.quadopter.quaternion_[3],
+                                        self.quadopter.quaternion_[0])
+        self.so3_control.set_velocity(self.quadopter.linear_velocity_)
+        self.so3_control.set_angular_velocity(self.quadopter.angular_velocity_)
+        self.so3_control.calculate_control([np.nan, np.nan, np.nan], [vx, vy, vz], yaw, self.kx, self.kv)
+        throttle = self.so3_control.get_computed_throttle()
+        tau_x, tau_y, tau_z = self.so3_control.get_computed_angular_velocity()
+        forces, torques = self.get_px4_forces(throttle, tau_x, tau_y, tau_z)
+        return forces, torques
+
+    def angular_velocity_control(self, ang_vel_x, ang_vel_y, ang_vel_z, throttle):
+        forces, torques = self.get_px4_forces(throttle, ang_vel_x, ang_vel_y, ang_vel_z)
         return forces, torques
 
     def allocate_forces_and_torques(self, arm_length, throttle, omega_x, omega_y, omega_z, k=0.1):
