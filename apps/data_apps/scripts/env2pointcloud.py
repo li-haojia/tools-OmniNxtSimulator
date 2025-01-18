@@ -1,11 +1,12 @@
 """
 This script generates a 3D occupancy map using NVIDIA Omniverse Isaac Sim and saves it as a PCD file.
 Run the script using the following command:
-./gui.sh env2_pointcloud.py
+./stream.sh env2pointcloud.py
 """
 
 import omni
 import argparse
+import asyncio
 from omni.isaac.lab.app import AppLauncher
 def parse_arguments():
     """Parse command-line arguments.
@@ -21,28 +22,26 @@ def parse_arguments():
 app_launcher = AppLauncher(parse_arguments())
 simulation_app = app_launcher.app
 
-from omni.isaac.core.utils import extensions
 from omni.isaac.core.utils.extensions import enable_extension
 enable_extension("omni.isaac.occupancy_map")
 simulation_app.update()
-from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
-
-import omni.isaac.lab.sim as sim_utils
-from omni.isaac.core import World
 from omni.isaac.core.utils.stage import get_current_stage, add_reference_to_stage
-import omni.isaac.core.utils.stage as stage_utils
-from omni.isaac.lab.assets import Articulation
-from omni.isaac.lab.sim import SimulationContext
-# Import necessary libraries
-import carb
-import numpy as np
-from pxr import UsdPhysics, Sdf, Gf, UsdGeom, Usd
+from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
 from omni.isaac.occupancy_map.bindings import _occupancy_map
-from omni.isaac.core.utils.stage import open_stage
 from omni.isaac.nucleus import get_assets_root_path
-import math
+from omni.isaac.lab.sim import SimulationContext
+from omni.kit.async_engine import run_coroutine
+import omni.isaac.lab.sim as sim_utils
+from pxr import Gf, UsdGeom, Usd
+import numpy as np
 import textwrap
+import carb
+import math
 import os
+
+MAX_CONCURRENT_TASKS = int(os.cpu_count())
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+context = SimulationContext(sim_utils.SimulationCfg(dt=0.1))
 
 def write_points_to_file(points, filename):
     points = np.asarray(points, dtype=np.float32)
@@ -62,10 +61,6 @@ def save_point_cloud_to_pcd(num_sub_boxes, filename="environment_point_cloud.pcd
     - points (array-like): An iterable of points, where each point is an iterable of three coordinates (x, y, z).
     - filename (str): The name of the file to save the point cloud to.
     """
-    # 1. Read split points from files 
-    # 2. Write points to pcd file and calculate the number of points
-    # 3. Calculate the total number of points and write header to pcd file
-
     if os.path.exists(filename):
         os.remove(filename)
 
@@ -148,8 +143,31 @@ def split_bounding_box(range_min, range_max, cell_size, max_size=100):
                 sub_boxes.append((min_corner, max_corner))
     return sub_boxes
 
+from asyncio import Semaphore
+
+async def process_sub_box(id, min_range, max_range, cell_size, origin, output_path="environment_point_cloud.pcd"):
+    async with semaphore:
+        try:
+            carb.log_info(f"Processing sub-box {id}")
+            physx = omni.physx.acquire_physx_interface()
+            stage_id = omni.usd.get_context().get_stage_id()
+            timeline = omni.timeline.get_timeline_interface()
+            await omni.kit.app.get_app().next_update_async()
+            timeline.play()
+            await omni.kit.app.get_app().next_update_async()
+            occupancy_map = _occupancy_map.Generator(physx, stage_id)
+            occupancy_map.update_settings(cell_size, 4, 5, 6)
+            occupancy_map.set_transform(origin, min_range, max_range)
+            carb.log_info(f"Generating occupancy map for sub-box {id}")
+            occupancy_map.generate3d()
+            points = occupancy_map.get_occupied_positions()
+            print(f"Sub-box {id}: {min_range}, {max_range} | Points: {len(points)}")
+            write_points_to_file(points, f"{output_path}_{id}.txt")
+        except Exception as e:
+            print(f"Error processing sub-box {id}: {e}")
+
 # function to generate and save occupancy map
-def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0)):
+async def generate_and_save_occupancy_map(usd_paths, output_path, cell_size = 0.2, origin=(0.0,0.0,0.0)):
     """
     Generate a 3D occupancy map using NVIDIA Omniverse Isaac Sim and save it as a PLY file.
     """
@@ -158,9 +176,6 @@ def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, orig
     if assets_root_path is None:
         carb.log_error("Could not find Isaac Sim assets folder")
         return
-
-    # Create a simulation context
-    context = SimulationContext(sim_utils.SimulationCfg(dt=0.001))
 
     # Load the environment stage
     for usd_path in usd_paths:
@@ -188,30 +203,21 @@ def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, orig
     print(f"Stage bounding box: {range_min}, {range_max}")
     sub_boxes = split_bounding_box(range_min, range_max, cell_size)
     print(f"Number of sub-boxes: {len(sub_boxes)}")
-    physx = omni.physx.acquire_physx_interface()
-    stage_id = omni.usd.get_context().get_stage_id()
-    timeline = omni.timeline.get_timeline_interface()
-    timeline.play()
-    context.step()
-    print("Timeline playing")
-    occupancy_map = _occupancy_map.Generator(physx, stage_id)
-    context.step()
-    
-    for i, (min_range, max_range) in enumerate(sub_boxes):
-        occupancy_map.update_settings(cell_size, 4, 5, 6)
-        occupancy_map.set_transform(origin, min_range, max_range)
-        occupancy_map.generate3d()
-        points = occupancy_map.get_occupied_positions()
-        print(f"Sub-box {i}: {min_range}, {max_range} | Points: {len(points)}")
-        write_points_to_file(points, f"{output_path}_{i}.txt")
 
+    tasks = []
+    for i, (min_range, max_range) in enumerate(sub_boxes):
+        task = run_coroutine(process_sub_box(i, min_range, max_range, cell_size, origin, output_path))   
+        tasks.append(task)
+        
+    # Await all tasks to run them in parallel
+    await asyncio.gather(*tasks)
+
+    timeline = omni.timeline.get_timeline_interface()
     timeline.stop()
     # Save the points to a PCD file
-    # save_point_cloud_to_pcd(points, output_path)
     save_point_cloud_to_pcd(len(sub_boxes), output_path)
 
-# Run the async function
-if __name__ == "__main__":
+async def main():
     paths = [
         # f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
         f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd",
@@ -220,6 +226,15 @@ if __name__ == "__main__":
     ]
     output_path = "occupancy_map.pcd"
     cell_size = 0.2
-    origin = (0.0,0.0,0.0) # x y z
+    origin = (0.0, 0.0, 0.0)  # x y z
 
-    generate_and_save_occupancy_map(paths, output_path, cell_size, origin)
+    print("Generating occupancy map...")
+    await generate_and_save_occupancy_map(paths, output_path, cell_size, origin)
+    print("Occupancy map generation complete")
+
+# Run the async function
+if __name__ == "__main__":
+    task = asyncio.ensure_future(main())
+    while not task.done():
+        omni.kit.app.get_app().update()
+        
