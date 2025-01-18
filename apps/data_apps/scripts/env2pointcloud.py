@@ -40,11 +40,21 @@ from pxr import UsdPhysics, Sdf, Gf, UsdGeom, Usd
 from omni.isaac.occupancy_map.bindings import _occupancy_map
 from omni.isaac.core.utils.stage import open_stage
 from omni.isaac.nucleus import get_assets_root_path
-import os
-import numpy as np
+import math
 import textwrap
+import os
 
-def save_point_cloud_to_pcd(points, filename="environment_point_cloud.pcd"):
+def write_points_to_file(points, filename):
+    points = np.asarray(points, dtype=np.float32)
+    print(f"Points shape: {points.shape}")
+    if points.shape[0] == 0:
+        return
+    if points.shape[1] != 3:
+        raise ValueError("Points should have 3 columns (x, y, z)")
+    with open(filename, 'w', encoding='utf-8') as file:
+        np.savetxt(file, points, fmt="%.6f %.6f %.6f")
+
+def save_point_cloud_to_pcd(num_sub_boxes, filename="environment_point_cloud.pcd"):
     """
     Save point cloud as a .pcd file in ASCII format.
 
@@ -52,13 +62,27 @@ def save_point_cloud_to_pcd(points, filename="environment_point_cloud.pcd"):
     - points (array-like): An iterable of points, where each point is an iterable of three coordinates (x, y, z).
     - filename (str): The name of the file to save the point cloud to.
     """
-    points = np.asarray(points, dtype=np.float32)
-    print(f"Points shape: {points.shape}")
-    if points.ndim != 2 or points.shape[1] != 3:
-        raise ValueError("Points array must be of shape (N, 3)")
+    # 1. Read split points from files 
+    # 2. Write points to pcd file and calculate the number of points
+    # 3. Calculate the total number of points and write header to pcd file
 
-    num_points = points.shape[0]
+    if os.path.exists(filename):
+        os.remove(filename)
 
+    num_points = 0
+    for i in range(num_sub_boxes):
+        if not os.path.exists(f"{filename}_{i}.txt"):
+            continue
+        with open(f"{filename}_{i}.txt", 'r') as file:
+            lines = file.readlines()
+            num_points += len(lines)
+            with open(filename, 'a') as pcd_file:
+                for line in lines:
+                    pcd_file.write(line)
+        # Remove the file after writing to pcd file
+        os.remove(f"{filename}_{i}.txt")
+
+    print(f"Total number of points: {num_points}")
     header = textwrap.dedent(f"""\
         # .PCD v0.7 - Point Cloud Data file format
         VERSION 0.7
@@ -72,17 +96,60 @@ def save_point_cloud_to_pcd(points, filename="environment_point_cloud.pcd"):
         POINTS {num_points}
         DATA ascii
         """)
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+        lines.insert(0, header)
+    
+    with open(filename, 'w') as file:
+        file.writelines(lines)
 
-    try:
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(header)
-            np.savetxt(file, points, fmt="%.6f %.6f %.6f")
-        print(f"Point cloud saved to {filename}")
-    except IOError as e:
-        print(f"Failed to save point cloud to {filename}: {e}")
+
+def split_bounding_box(range_min, range_max, cell_size, max_size=100):
+    """
+    Split the bounding box into smaller boxes with a maximum size of max_size * cell_size.
+    
+    Parameters:
+    - range_min (Gf.Vec3f): Minimum coordinates of the bounding box.
+    - range_max (Gf.Vec3f): Maximum coordinates of the bounding box.
+    - cell_size (float): Cell size for each point.
+    - max_size (int): Maximum number of cells per axis in each sub-box.
+    
+    Returns:
+    - List of tuples containing min and max coordinates for each sub-box.
+    """
+    sub_boxes = []
+    steps = [
+        math.ceil((range_max[i] - range_min[i]) / (cell_size * max_size)) 
+        for i in range(3)
+    ]
+    steps = [max(1, step) for step in steps]  # Ensure at least one step per axis
+
+    x_steps = steps[0]
+    y_steps = steps[1]
+    z_steps = steps[2]
+
+    x_step_size = (range_max[0] - range_min[0]) / x_steps
+    y_step_size = (range_max[1] - range_min[1]) / y_steps
+    z_step_size = (range_max[2] - range_min[2]) / z_steps
+
+    for i in range(x_steps):
+        for j in range(y_steps):
+            for k in range(z_steps):
+                min_corner = (
+                    range_min[0] + i * x_step_size,
+                    range_min[1] + j * y_step_size,
+                    range_min[2] + k * z_step_size
+                )
+                max_corner = (
+                    min_corner[0] + x_step_size,
+                    min_corner[1] + y_step_size,
+                    min_corner[2] + z_step_size
+                )
+                sub_boxes.append((min_corner, max_corner))
+    return sub_boxes
 
 # function to generate and save occupancy map
-def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0), min_bound=(-2.0,-2.0,-0.5), max_bound=(2.0,2.0,2.0)):
+def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, origin=(0.0,0.0,0.0)):
     """
     Generate a 3D occupancy map using NVIDIA Omniverse Isaac Sim and save it as a PLY file.
     """
@@ -93,11 +160,11 @@ def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, orig
         return
 
     # Create a simulation context
-    context = SimulationContext(sim_utils.SimulationCfg(dt=0.1))
+    context = SimulationContext(sim_utils.SimulationCfg(dt=0.001))
 
     # Load the environment stage
     for usd_path in usd_paths:
-        prim_path = f"/{usd_path.split('/')[-1].split('.')[0]}"
+        prim_path = f"/Env/{usd_path.split('/')[-1].split('.')[0]}"
         print(f"Loading stage at {prim_path}")
         add_reference_to_stage(usd_path, prim_path)
         stage = Usd.Stage.Open(usd_path)
@@ -111,11 +178,16 @@ def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, orig
             xform = UsdGeom.Xformable(root_prim)
             xform.AddScaleOp().Set(scale_vector)
 
-    # Get the stage and define the physics scene
-    # UsdPhysics.Scene.Define(stage, Sdf.Path("/World/physicsScene"))
-    # print("Physics scene defined")
-    context_get = omni.usd.get_context()
-    # Play the timeline to ensure physics is enabled
+    # Get env bbox
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath("/Env")
+    bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_])
+    bbox = bbox_cache.ComputeWorldBound(prim)
+    range_min = bbox.GetRange().GetMin()
+    range_max = bbox.GetRange().GetMax()
+    print(f"Stage bounding box: {range_min}, {range_max}")
+    sub_boxes = split_bounding_box(range_min, range_max, cell_size)
+    print(f"Number of sub-boxes: {len(sub_boxes)}")
     physx = omni.physx.acquire_physx_interface()
     stage_id = omni.usd.get_context().get_stage_id()
     timeline = omni.timeline.get_timeline_interface()
@@ -124,40 +196,30 @@ def generate_and_save_occupancy_map(usd_paths, output_path,cell_size = 0.2, orig
     print("Timeline playing")
     occupancy_map = _occupancy_map.Generator(physx, stage_id)
     context.step()
+    
+    for i, (min_range, max_range) in enumerate(sub_boxes):
+        occupancy_map.update_settings(cell_size, 4, 5, 6)
+        occupancy_map.set_transform(origin, min_range, max_range)
+        occupancy_map.generate3d()
+        points = occupancy_map.get_occupied_positions()
+        print(f"Sub-box {i}: {min_range}, {max_range} | Points: {len(points)}")
+        write_points_to_file(points, f"{output_path}_{i}.txt")
 
-    # Configure the occupancy map generator
-    cell_size = 0.2
-    occupancy_map.update_settings(cell_size, 1, 1, 0.5)
-    occupancy_map.set_transform(origin, min_bound, max_bound)
-
-    context.step()
-    print("Occupancy map generator configured")
-
-    # Generate the occupancy map
-    occupancy_map.generate3d()
-    context.step()
     timeline.stop()
-    print("Occupancy map generated")
-
-    # Retrieve the 3D points from the occupancy map
-    points = occupancy_map.get_occupied_positions()
-
-    print(f"Number of occupied points: {len(points)}")
-
     # Save the points to a PCD file
-    save_point_cloud_to_pcd(points, output_path)
+    # save_point_cloud_to_pcd(points, output_path)
+    save_point_cloud_to_pcd(len(sub_boxes), output_path)
 
 # Run the async function
 if __name__ == "__main__":
     paths = [
         # f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
-        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd",
-        f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd"
+        f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd",
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd"
     ]
     output_path = "occupancy_map.pcd"
     cell_size = 0.2
     origin = (0.0,0.0,0.0) # x y z
-    min_bound = (-28.0, -25.0, -0.5) # x y z
-    max_bound = (9.0, 32.0, 9.5) # x y z
 
-    generate_and_save_occupancy_map(paths, output_path, cell_size, origin, min_bound, max_bound)
+    generate_and_save_occupancy_map(paths, output_path, cell_size, origin)

@@ -28,6 +28,7 @@ if [ $# -lt 1 ]; then
 fi
 
 TARGET_SCRIPT=$1
+shift
 check_exts_dir
 check_target_script $TARGET_SCRIPT
-$SCRIPT_DIR/../isaaclab.sh -p $TARGET_SCRIPT "$@" --headless
+$SCRIPT_DIR/../_isaac_sim/python.sh $TARGET_SCRIPT --headless $@
