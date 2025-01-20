@@ -32,7 +32,7 @@ from omni.isaac.nucleus import get_assets_root_path
 from omni.isaac.lab.sim import SimulationContext
 from omni.kit.async_engine import run_coroutine
 import omni.isaac.lab.sim as sim_utils
-from pxr import Gf, UsdGeom, Usd
+from pxr import Gf, UsdGeom, Usd, UsdPhysics
 import numpy as np
 import textwrap
 import carb
@@ -42,6 +42,11 @@ import os
 MAX_CONCURRENT_TASKS = int(os.cpu_count())
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 context = SimulationContext(sim_utils.SimulationCfg(dt=0.1))
+stage_event_type = None
+def on_stage_event(event):
+    global stage_event_type
+    stage_event_type = event.type
+stage_event_sub = omni.usd.get_context().get_stage_event_stream().create_subscription_to_pop(on_stage_event, name="stage_event_sub")
 
 def write_points_to_file(points, filename):
     points = np.asarray(points, dtype=np.float32)
@@ -94,21 +99,21 @@ def save_point_cloud_to_pcd(num_sub_boxes, filename="environment_point_cloud.pcd
     with open(filename, 'r') as file:
         lines = file.readlines()
         lines.insert(0, header)
-    
+
     with open(filename, 'w') as file:
         file.writelines(lines)
 
 
-def split_bounding_box(range_min, range_max, cell_size, max_size=100):
+def split_bounding_box(range_min, range_max, cell_size, max_size=250):
     """
     Split the bounding box into smaller boxes with a maximum size of max_size * cell_size.
-    
+
     Parameters:
     - range_min (Gf.Vec3f): Minimum coordinates of the bounding box.
     - range_max (Gf.Vec3f): Maximum coordinates of the bounding box.
     - cell_size (float): Cell size for each point.
     - max_size (int): Maximum number of cells per axis in each sub-box.
-    
+
     Returns:
     - List of tuples containing min and max coordinates for each sub-box.
     """
@@ -143,8 +148,6 @@ def split_bounding_box(range_min, range_max, cell_size, max_size=100):
                 sub_boxes.append((min_corner, max_corner))
     return sub_boxes
 
-from asyncio import Semaphore
-
 async def process_sub_box(id, min_range, max_range, cell_size, origin, output_path="environment_point_cloud.pcd"):
     async with semaphore:
         try:
@@ -158,13 +161,26 @@ async def process_sub_box(id, min_range, max_range, cell_size, origin, output_pa
             occupancy_map = _occupancy_map.Generator(physx, stage_id)
             occupancy_map.update_settings(cell_size, 4, 5, 6)
             occupancy_map.set_transform(origin, min_range, max_range)
-            carb.log_info(f"Generating occupancy map for sub-box {id}")
             occupancy_map.generate3d()
             points = occupancy_map.get_occupied_positions()
             print(f"Sub-box {id}: {min_range}, {max_range} | Points: {len(points)}")
             write_points_to_file(points, f"{output_path}_{id}.txt")
         except Exception as e:
             print(f"Error processing sub-box {id}: {e}")
+
+async def wait_for_assets_to_load():
+    while True:
+        await omni.usd.get_context().next_stage_event_async()
+        await asyncio.sleep(5)
+        if stage_event_type == int(omni.usd.StageEventType.ASSETS_LOADING):
+            print(f"Loading assets...")
+            continue
+        elif stage_event_type == int(omni.usd.StageEventType.ASSETS_LOADED):
+            print(f"Assets loaded")
+            break
+        else:
+            print(f"Stage event type: {stage_event_type} | Waiting for assets to load...")
+            continue
 
 # function to generate and save occupancy map
 async def generate_and_save_occupancy_map(usd_paths, output_path, cell_size = 0.2, origin=(0.0,0.0,0.0)):
@@ -184,31 +200,55 @@ async def generate_and_save_occupancy_map(usd_paths, output_path, cell_size = 0.
         add_reference_to_stage(usd_path, prim_path)
         stage = Usd.Stage.Open(usd_path)
         unit = UsdGeom.GetStageMetersPerUnit(stage)
-        print(f"Stage unit: {unit}")
+        print(f"Meters per unit: {unit}")
+        await wait_for_assets_to_load()
+
         if unit != 1.0:
             # Need to scale the stage to match the 1 unit = 1 meter
-            scale_vector = Gf.Vec3f(float(unit), float(unit), float(unit))
-            stage = omni.usd.get_context().get_stage()
-            root_prim = stage.GetPrimAtPath(prim_path)
-            xform = UsdGeom.Xformable(root_prim)
-            xform.AddScaleOp().Set(scale_vector)
+            try:
+                stage = omni.usd.get_context().get_stage()
+                root_prim = stage.GetPrimAtPath(prim_path)
+                xform = UsdGeom.Xformable(root_prim)
+                xform.ClearXformOpOrder()
+                xform.AddScaleOp(precision=UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(unit, unit, unit))
+                await omni.kit.app.get_app().next_update_async()
+            except Exception as e:
+                print(f"Error scaling stage: {e}")
+                exit(1)
+
+        # Go through all the prims in the stage and set the collision flag
+        for prim in stage.Traverse():
+            if prim.IsA(UsdGeom.Mesh):
+                if not prim.HasAPI(UsdPhysics.CollisionAPI):
+                    UsdPhysics.CollisionAPI.Apply(prim)
+                    print(f"Applied CollisionAPI to {prim.GetPath()}")
+                else:
+                    collision_flag = UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr()
+                    if not collision_flag.Get():
+                        collision_flag.Set(True)
+                        print(f"Enabled collision for {prim.GetPath()}")
+        await omni.kit.app.get_app().next_update_async()
 
     # Get env bbox
-    stage = omni.usd.get_context().get_stage()
-    prim = stage.GetPrimAtPath("/Env")
-    bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_])
-    bbox = bbox_cache.ComputeWorldBound(prim)
-    range_min = bbox.GetRange().GetMin()
-    range_max = bbox.GetRange().GetMax()
-    print(f"Stage bounding box: {range_min}, {range_max}")
-    sub_boxes = split_bounding_box(range_min, range_max, cell_size)
-    print(f"Number of sub-boxes: {len(sub_boxes)}")
+    try:
+        stage = omni.usd.get_context().get_stage()
+        prim = stage.GetPrimAtPath("/Env")
+        bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_])
+        bbox = bbox_cache.ComputeWorldBound(prim)
+        range_min = bbox.GetRange().GetMin()
+        range_max = bbox.GetRange().GetMax()
+        print(f"Stage bounding box: {range_min}, {range_max}")
+        sub_boxes = split_bounding_box(range_min, range_max, cell_size)
+        print(f"Number of sub-boxes: {len(sub_boxes)}")
+    except Exception as e:
+        print(f"Error getting stage bounding box: {e}")
+        exit(1)
 
     tasks = []
     for i, (min_range, max_range) in enumerate(sub_boxes):
-        task = run_coroutine(process_sub_box(i, min_range, max_range, cell_size, origin, output_path))   
+        task = run_coroutine(process_sub_box(i, min_range, max_range, cell_size, origin, output_path))
         tasks.append(task)
-        
+
     # Await all tasks to run them in parallel
     await asyncio.gather(*tasks)
 
@@ -222,7 +262,10 @@ async def main():
         # f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
         f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/full_warehouse.usd",
         # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
-        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd"
+        # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd",
+        # f"omniverse://localhost/NVIDIA/Demos/MFG/MFG_Factory_Welding_Demo/MFG_Factory_Welding_Demo.usd",
+        # f"omniverse://localhost/NVIDIA/Demos/AEC/BrownstoneDemo/Worlds/World_BrownstoneDemopack_Morning.usd",
+        # f"omniverse://localhost/NVIDIA/Demos/AEC/TowerDemo/TowerDemopack/World_TowerDemopack.usd"
     ]
     output_path = "occupancy_map.pcd"
     cell_size = 0.2
@@ -234,7 +277,9 @@ async def main():
 
 # Run the async function
 if __name__ == "__main__":
+    carbSettings = carb.settings.get_settings_interface()
+    carbSettings.destroy_item("/app/asyncRendering")
+    carbSettings.destroy_item("/app/asyncRenderingLowLatency")
     task = asyncio.ensure_future(main())
     while not task.done():
         omni.kit.app.get_app().update()
-        
