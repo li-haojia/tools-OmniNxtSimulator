@@ -202,3 +202,22 @@ def register_lights_placement(forklift_prim, pallet_prim):
         return lights.node
 
     rep.randomizer.register(randomize_lights)
+
+def register_randomize_lights(prim_paths):
+    bb_cache = create_bbox_cache()
+    combined_range_arr = compute_combined_aabb(bb_cache, prim_paths)
+    pos_min = (combined_range_arr[0], combined_range_arr[1], (combined_range_arr[5] - combined_range_arr[2]) * 0.7 + combined_range_arr[2])
+    pos_max = (combined_range_arr[3], combined_range_arr[4], combined_range_arr[5])
+    area_per_light = random.uniform(20, 100)
+    count = int((combined_range_arr[3] - combined_range_arr[0]) * (combined_range_arr[4] - combined_range_arr[1]) / area_per_light)
+    def randomize_lights_intensities():
+        lights = rep.create.light(
+            light_type="Sphere",
+            color=rep.distribution.uniform((0.5, 0.3, 0.2), (0.9, 0.9, 0.8)),
+            intensity=rep.distribution.uniform(300, 10000),
+            position=rep.distribution.uniform(pos_min, pos_max),
+            scale=rep.distribution.uniform(5, 10),
+            count=count,
+        )
+        return lights.node
+    rep.randomizer.register(randomize_lights_intensities)

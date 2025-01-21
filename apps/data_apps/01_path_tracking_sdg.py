@@ -15,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/trajectory_small.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/WarehousePhysics/trajectory_100.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -59,19 +59,19 @@ config = {
             },
         ],
     },
-    "rt_subframes": 50,
-    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+    "rt_subframes": 16,
+    "env_url": "omniverse://localhost/NVIDIA/Demos/WarehousePhysics/Worlds/World_Demopack.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/data_apps/output/path_tracking_sdg",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/WarehousePhysics/path_tracking_sdg",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
         "colorize_depth": True,
-        "instance_segmentation": True,
-        "colorize_instance_segmentation": True,
-        "semantic_segmentation": True,
-        "colorize_semantic_segmentation": True,
+        "instance_segmentation": False,
+        "colorize_instance_segmentation": False,
+        "semantic_segmentation": False,
+        "colorize_semantic_segmentation": False,
         "bounding_box_2d_tight": True,
         "bounding_box_3d": True,
     },
@@ -117,34 +117,49 @@ from data_apps.synthetic_data.path_tracking_sdg_utils import TrajectoryDatabase
 from omni.physx.scripts import physicsUtils
 from omni.isaac.core.utils import prims
 from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles, quat_to_rot_matrix
-from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths
+from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths, add_reference_to_stage
 from omni.isaac.core.utils.semantics import count_semantics_in_scene
 from omni.isaac.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pxr import UsdGeom, Gf, UsdPhysics
+from pxr import UsdGeom, Gf, UsdPhysics, Usd
 
 WRITE_THREADS = 64
 QUEUE_SIZE = 1000
 rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
 rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
 
-assets_root_path = get_assets_root_path()
-if assets_root_path is None:
-    carb.log_error("Could not get nucleus server path, closing application..")
-    simulation_app.close()
+if ":/" not in config["env_url"]:
+    config["env_url"] = get_assets_root_path() + config["env_url"]
+usd_path = config["env_url"]
 
-# Open the given environment in a new stage
-print(f"[scene_based_sdg] Loading Stage {config['env_url']}")
-if not open_stage(assets_root_path + config["env_url"]):
-    carb.log_error(f"Could not open stage{config['env_url']}, closing application..")
-    simulation_app.close()
+prim_path = f"/Env/{usd_path.split('/')[-1].split('.')[0]}"
+print(f"Loading stage at {prim_path}")
+add_reference_to_stage(usd_path, prim_path)
+stage = Usd.Stage.Open(usd_path)
+unit = UsdGeom.GetStageMetersPerUnit(stage)
+print(f"Meters per unit: {unit}")
+
+if unit != 1.0:
+    # Need to scale the stage to match the 1 unit = 1 meter
+    try:
+        stage = omni.usd.get_context().get_stage()
+        root_prim = stage.GetPrimAtPath(prim_path)
+        xform = UsdGeom.Xformable(root_prim)
+        xform.ClearXformOpOrder()
+        xform.AddScaleOp(precision=UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(unit, unit, unit))
+    except Exception as e:
+        print(f"Error scaling stage: {e}")
+        exit(1)
 
 stage = get_current_stage()
-# print_stage_prim_paths(stage)
+root_prim = stage.GetPrimAtPath(prim_path)
 
 # Disable capture on play (data generation will be triggered manually)
 rep.orchestrator.set_capture_on_play(False)
+
+# Load the light prims and make them visible
+scene_based_sdg_utils.register_randomize_lights([root_prim.GetPrimPath()])
 
 # Clear any previous semantic data in the loaded stage
 if config["clear_previous_semantics"]:
@@ -215,10 +230,17 @@ carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
 # (int): Number of samples to use in the filter. A higher number improves quality at the cost of performance.
 carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 8)
 
+# Setup the randomizations to be triggered every frame
+with rep.trigger.on_frame(interval=50):
+    rep.randomizer.randomize_lights_intensities()
+
 # Start the SDG
 # Enable the render products for SDG
 for rp in render_products:
     rp.hydra_texture.set_updates_enabled(True)
+
+for _ in range(10):
+    rep.orchestrator.step(delta_time=0.1, rt_subframes=rt_subframes)
 
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
@@ -244,16 +266,6 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         rotation = quat_to_euler_angles(orientation) * 180 / math.pi
         velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
         omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
-
-        # with cameras_xform:
-        #     rep.modify.pose(
-        #         position=position,
-        #         rotation=quat_to_euler_angles(orientation) * 180 / math.pi,
-        #     )
-        #     rep.physics.rigid_body(
-        #         velocity=(float(velocity[0]), float(velocity[1]), float(velocity[2])),
-        #         angular_velocity=(float(omega[0]), float(omega[1]), float(omega[2])),
-        #     )
         
         xform_api = UsdGeom.Xformable(cameras_xform_prim)
         xform_api.ClearXformOpOrder()
@@ -284,6 +296,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except Exception as e:
+        print(f"[scene_based_sdg] Error: {e}")
     finally:
         # Cleanup render products
         for rp in render_products:
