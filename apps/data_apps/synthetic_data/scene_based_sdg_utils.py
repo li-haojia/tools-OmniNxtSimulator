@@ -21,6 +21,36 @@ from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_
 from omni.isaac.core.utils.semantics import remove_all_semantics
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
 
+# Process lights in the stage and create them in the replicator
+def process_lights(stage, usd_light_class, create_type):
+    """"
+    Process lights in the stage and create them in the replicator.
+    Args:
+        stage: USD stage.
+        usd_light_class: USD class for the light, either UsdLux.SphereLight or UsdLux.DiskLight.
+        create_type: Replicator create type for the light, either "sphere" or "disk".
+    """
+    light_prims = [prim for prim in stage.Traverse() if prim.IsA(usd_light_class)]
+
+    for prim in light_prims:
+        # Get the light position and rotation
+        transform = omni.usd.get_world_transform_matrix(prim)
+        transform = transform.GetOrthonormalized(issueWarning=True)
+        position = transform.ExtractTranslation()
+        rotation = transform.ExtractRotation()
+        euler_angles = rotation.Decompose(Gf.Vec3d(1, 0, 0), Gf.Vec3d(0, 1, 0), Gf.Vec3d(0, 0, 1))
+
+        # Get the light intensity
+        intensity_attr = prim.GetAttribute("intensity")
+        intensity = intensity_attr.Get() if intensity_attr.IsValid() else 1.0
+
+        # Create the light in the replicator
+        rep.create.light(
+            position=position,
+            rotation=euler_angles,
+            light_type=create_type,
+            intensity=intensity
+        )
 
 # Add colliders to Gprim and Mesh descendants of the root prim
 def add_colliders(root_prim, approx_type="convexHull"):

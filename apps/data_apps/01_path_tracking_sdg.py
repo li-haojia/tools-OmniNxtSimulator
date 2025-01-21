@@ -15,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/BrownstoneDemo/trajectory_100.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/trajectory_100.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -59,11 +59,11 @@ config = {
             },
         ],
     },
-    "rt_subframes": 16,
-    "env_url": "file:///workspace/isaaclab/user_apps/assets/Demos/AEC/BrownstoneDemo/World_BrownstoneDemopack_Morning.usd",
+    "rt_subframes": 8,
+    "env_url": "file:///workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/MFG/MFG_Factory_Welding_Demo/MFG_Factory_Welding_Demo.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/assets/BrownstoneDemo/path_tracking_sdg",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/path_tracking_sdg",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
@@ -122,7 +122,7 @@ from omni.isaac.core.utils.semantics import count_semantics_in_scene
 from omni.isaac.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pxr import UsdGeom, Gf, UsdPhysics, Usd
+from pxr import UsdGeom, Gf, UsdPhysics, Usd, UsdLux
 
 def carb_settings():
     # Detailed settings for the replicator
@@ -177,6 +177,10 @@ if unit != 1.0:
 stage = get_current_stage()
 root_prim = stage.GetPrimAtPath(prim_path)
 
+# Process lights in the stage
+scene_based_sdg_utils.process_lights(stage, UsdLux.SphereLight, "sphere")
+scene_based_sdg_utils.process_lights(stage, UsdLux.DiskLight, "sphere")
+
 # Load sky
 sky_usd_path = "https://omniverse-content-production.s3.us-west-2.amazonaws.com/Environments/2023_1/DomeLights/Dynamic/CumulusLight.usd"
 rep.create.from_usd(usd=sky_usd_path)
@@ -186,7 +190,6 @@ sky = rep.get.prim_at_path(path="/Replicator/Ref_Xform/Ref/Looks/SkyMaterial/Sha
 rep.orchestrator.set_capture_on_play(False)
 
 # Load the light prims and make them visible
-scene_based_sdg_utils.register_randomize_lights([root_prim.GetPrimPath()])
 scene_based_sdg_utils.register_randomize_sun_light(sky)
 
 # Clear any previous semantic data in the loaded stage
@@ -246,7 +249,6 @@ rt_subframes = config.get("rt_subframes", -1)
 # Setup the randomizations to be triggered every frame
 with rep.trigger.on_frame(interval=10):
     rep.randomizer.randomize_sun_light()
-    rep.randomizer.randomize_lights_intensities()
 
 # Start the SDG
 # Enable the render products for SDG
