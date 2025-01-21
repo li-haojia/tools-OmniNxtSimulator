@@ -148,7 +148,7 @@ def split_bounding_box(range_min, range_max, cell_size, max_size=250):
                 sub_boxes.append((min_corner, max_corner))
     return sub_boxes
 
-async def process_sub_box(id, min_range, max_range, cell_size, origin, output_path="environment_point_cloud.pcd"):
+async def process_sub_box(id, total_sub_boxes, min_range, max_range, cell_size, origin, output_path="environment_point_cloud.pcd"):
     async with semaphore:
         try:
             carb.log_info(f"Processing sub-box {id}")
@@ -163,7 +163,7 @@ async def process_sub_box(id, min_range, max_range, cell_size, origin, output_pa
             occupancy_map.set_transform(origin, min_range, max_range)
             occupancy_map.generate3d()
             points = occupancy_map.get_occupied_positions()
-            print(f"Sub-box {id}: {min_range}, {max_range} | Points: {len(points)}")
+            print(f"Sub-box {id}/{total_sub_boxes}: {min_range}, {max_range} | Points: {len(points)}")
             write_points_to_file(points, f"{output_path}_{id}.txt")
         except Exception as e:
             print(f"Error processing sub-box {id}: {e}")
@@ -245,8 +245,13 @@ async def generate_and_save_occupancy_map(usd_paths, output_path, cell_size = 0.
         exit(1)
 
     tasks = []
+    checkpoint = 0
+    # checkpoint = 3817
+    total_sub_boxes = len(sub_boxes)
     for i, (min_range, max_range) in enumerate(sub_boxes):
-        task = run_coroutine(process_sub_box(i, min_range, max_range, cell_size, origin, output_path))
+        if i <= checkpoint:
+            continue
+        task = run_coroutine(process_sub_box(i, total_sub_boxes, min_range, max_range, cell_size, origin, output_path))
         tasks.append(task)
 
     # Await all tasks to run them in parallel
@@ -255,7 +260,7 @@ async def generate_and_save_occupancy_map(usd_paths, output_path, cell_size = 0.
     timeline = omni.timeline.get_timeline_interface()
     timeline.stop()
     # Save the points to a PCD file
-    save_point_cloud_to_pcd(len(sub_boxes), output_path)
+    save_point_cloud_to_pcd(total_sub_boxes, output_path)
 
 async def main():
     paths = [
@@ -267,7 +272,7 @@ async def main():
         # f"omniverse://localhost/NVIDIA/Demos/AEC/BrownstoneDemo/Worlds/World_BrownstoneDemopack_Morning.usd",
         # f"omniverse://localhost/NVIDIA/Demos/AEC/TowerDemo/TowerDemopack/World_TowerDemopack.usd"
     ]
-    output_path = "occupancy_map.pcd"
+    output_path = "output/occupancy_map.pcd"
     cell_size = 0.2
     origin = (0.0, 0.0, 0.0)  # x y z
 
