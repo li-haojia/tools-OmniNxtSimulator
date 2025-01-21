@@ -15,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/WarehousePhysics/trajectory_100.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/BrownstoneDemo/trajectory_100.hdf5",
     "sample_interval": 10,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
@@ -60,10 +60,10 @@ config = {
         ],
     },
     "rt_subframes": 16,
-    "env_url": "omniverse://localhost/NVIDIA/Demos/WarehousePhysics/Worlds/World_Demopack.usd",
+    "env_url": "file:///workspace/isaaclab/user_apps/assets/Demos/AEC/BrownstoneDemo/World_BrownstoneDemopack_Morning.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/assets/WarehousePhysics/path_tracking_sdg",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/BrownstoneDemo/path_tracking_sdg",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
@@ -124,15 +124,37 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from pxr import UsdGeom, Gf, UsdPhysics, Usd
 
-WRITE_THREADS = 64
-QUEUE_SIZE = 1000
-rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
-rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
+def carb_settings():
+    # Detailed settings for the replicator
+    # https://docs.omniverse.nvidia.com/py/replicator/1.11.16/source/extensions/omni.replicator.core/docs/API.html#omni.replicator.core.settings.carb_settings
+    # IO threads and queue size for writing data
+    WRITE_THREADS = 64
+    QUEUE_SIZE = 1000
+    rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
+    rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
 
+    # Ray tracing motion blur settings
+    rep.settings.carb_settings("/omni/replicator/captureOnPlay", False)
+    rep.settings.carb_settings("/omni/replicator/captureMotionBlur", True)
+    rep.settings.carb_settings("/rtx/rendermode", "RayTracedLighting")
+    rep.settings.carb_settings("/rtx/post/aa/op", 3)
+    rep.settings.carb_settings("/rtx/post/motionblur/maxBlurDiameterFraction", 0.02)
+    rep.settings.carb_settings("/rtx/post/motionblur/exposureFraction", 1.0)
+    rep.settings.carb_settings("/rtx/post/motionblur/numSamples", 8)
+
+    # Light settings
+    rep.settings.carb_settings("/rtx/shadows/enabled", True)
+    rep.settings.carb_settings("/rtx/directLighting/domeLight/enabled", True)
+    rep.settings.carb_settings("/rtx/directLighting/domeLight/enabledInReflections", True)
+
+carb_settings()
 if ":/" not in config["env_url"]:
     config["env_url"] = get_assets_root_path() + config["env_url"]
-usd_path = config["env_url"]
+elif "file://" in config["env_url"]:
+    usd_dir = os.path.dirname(config["env_url"].split("file://")[-1])
+    os.chdir(usd_dir) # Avoid issues with relative paths in the USD file
 
+usd_path = config["env_url"]
 prim_path = f"/Env/{usd_path.split('/')[-1].split('.')[0]}"
 print(f"Loading stage at {prim_path}")
 add_reference_to_stage(usd_path, prim_path)
@@ -155,11 +177,17 @@ if unit != 1.0:
 stage = get_current_stage()
 root_prim = stage.GetPrimAtPath(prim_path)
 
+# Load sky
+sky_usd_path = "https://omniverse-content-production.s3.us-west-2.amazonaws.com/Environments/2023_1/DomeLights/Dynamic/CumulusLight.usd"
+rep.create.from_usd(usd=sky_usd_path)
+sky = rep.get.prim_at_path(path="/Replicator/Ref_Xform/Ref/Looks/SkyMaterial/Shader")
+
 # Disable capture on play (data generation will be triggered manually)
 rep.orchestrator.set_capture_on_play(False)
 
 # Load the light prims and make them visible
 scene_based_sdg_utils.register_randomize_lights([root_prim.GetPrimPath()])
+scene_based_sdg_utils.register_randomize_sun_light(sky)
 
 # Clear any previous semantic data in the loaded stage
 if config["clear_previous_semantics"]:
@@ -215,23 +243,9 @@ if writer_type not in rep.WriterRegistry.get_writers():
 # see: https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/subframes_examples.html
 rt_subframes = config.get("rt_subframes", -1)
 
-# Set replicator settings (capture only on request and enable motion blur)
-carb.settings.get_settings().set("/omni/replicator/captureOnPlay", False)
-carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", True)
-print(f"[MotionBlur] Setting RayTracedLighting render mode motion blur settings")
-# Setup ray tracing motion blur settings
-carb.settings.get_settings().set("/rtx/rendermode", "RayTracedLighting")
-# 0: Disabled, 1: TAA, 2: FXAA, 3: DLSS, 4:RTXAA
-carb.settings.get_settings().set("/rtx/post/aa/op", 3)
-# (float): The fraction of the largest screen dimension to use as the maximum motion blur diameter.
-carb.settings.get_settings().set("/rtx/post/motionblur/maxBlurDiameterFraction", 0.02)
-# (float): Exposure time fraction in frames (1.0 = one frame duration) to sample.
-carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
-# (int): Number of samples to use in the filter. A higher number improves quality at the cost of performance.
-carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 8)
-
 # Setup the randomizations to be triggered every frame
-with rep.trigger.on_frame(interval=50):
+with rep.trigger.on_frame(interval=10):
+    rep.randomizer.randomize_sun_light()
     rep.randomizer.randomize_lights_intensities()
 
 # Start the SDG
@@ -239,7 +253,7 @@ with rep.trigger.on_frame(interval=50):
 for rp in render_products:
     rp.hydra_texture.set_updates_enabled(True)
 
-for _ in range(10):
+for _ in range(50):
     rep.orchestrator.step(delta_time=0.1, rt_subframes=rt_subframes)
 
 env_semantics = count_semantics_in_scene("/Root")
@@ -266,7 +280,7 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         rotation = quat_to_euler_angles(orientation) * 180 / math.pi
         velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
         omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
-        
+
         xform_api = UsdGeom.Xformable(cameras_xform_prim)
         xform_api.ClearXformOpOrder()
         xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
