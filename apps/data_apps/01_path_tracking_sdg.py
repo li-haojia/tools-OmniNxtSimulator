@@ -16,36 +16,38 @@ config = {
         "headless": True,
     },
     "trajectory_path": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/trajectory_100.hdf5",
-    "sample_interval": 10,
+    "sample_interval": 50,
+    "start_group": 0,
+    "end_group": -1,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
         "mass": 0.85,
         "radius": 0.15,
-        "cameras": [{
+              "cameras": [{
                 "name": "left_front_camera",
                 "position": [0.0735, 0.0735, 0.067],
-                "quaternion": [ 0.924, 0, 0, 0.383],
+                "quaternion": [ 0.383, 0, 0, -0.924], #[ 0.924, 0, 0, 0.383],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
             }, {
                 "name": "right_front_camera",
                 "position": [0.0735, -0.0735, 0.067],
-                "quaternion": [  0.924, 0, 0, -0.383],
+                "quaternion": [ 0.383, 0, 0, 0.924],#[  0.924, 0, 0, -0.383],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
             }, {
                 "name": "right_back_camera",
                 "position": [-0.0735, -0.0735, 0.067],
-                "quaternion": [ 0.383, 0, 0, -0.924],
+                "quaternion":  [ 0.924, 0, 0, 0.383], #[ 0.383, 0, 0, -0.924],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
             }, {
                 "name": "left_back_camera",
                 "position": [-0.0735, 0.0735, 0.067],
-                "quaternion": [ 0.383, 0, 0, 0.924],
+                "quaternion": [  0.924, 0, 0, -0.383], #[ 0.383, 0, 0, 0.924],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
@@ -75,6 +77,7 @@ config = {
         "bounding_box_2d_tight": True,
         "bounding_box_3d": True,
     },
+    "save_trajectory_info": True,
     "clear_previous_semantics": False,
     "close_app_after_run": True,
 }
@@ -274,15 +277,17 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         # Load the trajectory for the current group
         trajectory = db.getTrajectory(group_num)
         interval = config.get("sample_interval", 100)
+        used_samples = []
         for sample_counter in range(len(trajectory)):
             if sample_counter % interval != 0:
                 continue
+            used_samples.append(sample_counter)
             timestamp = trajectory.getTimestamp()[sample_counter]
-            position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
-            orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+            position = trajectory.getPosbyIndex(sample_counter)  # numpy array
+            orientation = trajectory.getQuaternionbyIndex(sample_counter)  # numpy array [w, x, y, z]
             rotation = quat_to_euler_angles(orientation) * 180 / math.pi
-            velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
-            omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
+            velocity = trajectory.getVelbyIndex(sample_counter)  # numpy array
+            omega = trajectory.getOmgbyIndex(sample_counter) * 180 / math.pi  # numpy array
 
             xform_api = UsdGeom.Xformable(cameras_xform_prim)
             xform_api.ClearXformOpOrder()
@@ -300,6 +305,15 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
             rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
             print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
 
+        # Save the trajectory information
+        if config.get("save_trajectory_info", True):
+            trajectory_info = {
+                "trajectory_path": config["trajectory_path"],
+                "group_num": group_num,
+                "used_samples": used_samples,
+            }
+        with open(os.path.join(writer_kwargs["output_dir"], "trajectory_info.json"), "w") as f:
+            json.dump(trajectory_info, f)
         # Wait for the data to be written to disk
         rep.orchestrator.wait_until_complete()
         # Cleanup the writer
@@ -309,7 +323,11 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
 
 def main():
     # Process each group in a separate process
-    for group_num in range(len(db)):
+    start_group = config.get("start_group", 0)
+    end_group = config.get("end_group", -1)
+    if end_group == -1:
+        end_group = len(db)
+    for group_num in range(start_group, end_group):
         process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes)
 
 if __name__ == "__main__":

@@ -23,6 +23,27 @@ class Trajectory:
     def __getitem__(self, key):
         return Trajectory(self.group[key])
     
+    def getAccbyIndex(self, idx):
+        return self.acc[idx]
+    
+    def getJerkbyIndex(self, idx):
+        return self.jerk[idx]
+    
+    def getOmgbyIndex(self, idx):
+        return self.omg[idx]
+    
+    def getPosbyIndex(self, idx):
+        return self.pos[idx]
+    
+    def getQuaternionbyIndex(self, idx):
+        return self.quaternion[idx]
+    
+    def getThrbyIndex(self, idx):
+        return self.thr[idx]
+    
+    def getVelbyIndex(self, idx):
+        return self.vel[idx]
+    
     def getAccbyTimestamp(self, timestamp):
         idx = np.argmin(np.abs(self.timestamp - timestamp))
         return self.acc[idx]
