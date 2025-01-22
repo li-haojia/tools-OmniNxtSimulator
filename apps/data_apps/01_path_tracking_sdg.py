@@ -262,47 +262,50 @@ env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
 db = TrajectoryDatabase(config["trajectory_path"])
 def process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes):
-    # Setup the writer for the current group
-    writer = rep.WriterRegistry.get(writer_type)
-    writer_kwargs = config["writer_config"].copy()
-    writer_kwargs["output_dir"] = os.path.join(writer_kwargs["output_dir"], f"group_{group_num}")
-    print(f"[scene_based_sdg] Initializing {writer_type} with: {writer_kwargs}")
-    writer.initialize(**writer_kwargs)
-    writer.attach(render_products)
+    try:
+        # Setup the writer for the current group
+        writer = rep.WriterRegistry.get(writer_type)
+        writer_kwargs = config["writer_config"].copy()
+        writer_kwargs["output_dir"] = os.path.join(writer_kwargs["output_dir"], f"group_{group_num}")
+        print(f"[scene_based_sdg] Initializing {writer_type} with: {writer_kwargs}")
+        writer.initialize(**writer_kwargs)
+        writer.attach(render_products)
 
-    # Load the trajectory for the current group
-    trajectory = db.getTrajectory(group_num)
-    interval = config.get("sample_interval", 100)
-    for sample_counter in range(len(trajectory)):
-        if sample_counter % interval != 0:
-            continue
-        timestamp = trajectory.getTimestamp()[sample_counter]
-        position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
-        orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
-        rotation = quat_to_euler_angles(orientation) * 180 / math.pi
-        velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
-        omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
+        # Load the trajectory for the current group
+        trajectory = db.getTrajectory(group_num)
+        interval = config.get("sample_interval", 100)
+        for sample_counter in range(len(trajectory)):
+            if sample_counter % interval != 0:
+                continue
+            timestamp = trajectory.getTimestamp()[sample_counter]
+            position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
+            orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+            rotation = quat_to_euler_angles(orientation) * 180 / math.pi
+            velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
+            omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
 
-        xform_api = UsdGeom.Xformable(cameras_xform_prim)
-        xform_api.ClearXformOpOrder()
-        xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
-        xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
+            xform_api = UsdGeom.Xformable(cameras_xform_prim)
+            xform_api.ClearXformOpOrder()
+            xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
+            xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
 
-        physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
-        physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
-        physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
+            physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
+            physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
+            physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
 
-        # Update the physics state
-        next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
-        dt = next_timestamp - timestamp
-        start_time = time.time()
-        rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
-        print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
+            # Update the physics state
+            next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
+            dt = next_timestamp - timestamp
+            start_time = time.time()
+            rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
+            print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
 
-    # Wait for the data to be written to disk
-    rep.orchestrator.wait_until_complete()
-    # Cleanup the writer
-    writer.detach()
+        # Wait for the data to be written to disk
+        rep.orchestrator.wait_until_complete()
+        # Cleanup the writer
+        writer.detach()
+    except Exception as e:
+        print(f"[scene_based_sdg] Error in group {group_num}: {e}")
 
 def main():
     # Process each group in a separate process
