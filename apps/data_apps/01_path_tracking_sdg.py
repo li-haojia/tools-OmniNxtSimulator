@@ -281,12 +281,13 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
         for sample_counter in range(len(trajectory)):
             if sample_counter % interval != 0:
                 continue
+            used_samples.append(sample_counter)
             timestamp = trajectory.getTimestamp()[sample_counter]
-            position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
-            orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+            position = trajectory.getPosbyIndex(sample_counter)  # numpy array
+            orientation = trajectory.getQuaternionbyIndex(sample_counter)  # numpy array [w, x, y, z]
             rotation = quat_to_euler_angles(orientation) * 180 / math.pi
-            velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
-            omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
+            velocity = trajectory.getVelbyIndex(sample_counter)  # numpy array
+            omega = trajectory.getOmgbyIndex(sample_counter) * 180 / math.pi  # numpy array
 
             xform_api = UsdGeom.Xformable(cameras_xform_prim)
             xform_api.ClearXformOpOrder()
