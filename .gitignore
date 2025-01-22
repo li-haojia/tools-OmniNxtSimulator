@@ -1,8 +1,10 @@
 log
 *.AppImage
+*.pcd
 */**/__pycache__
 ./assets
 apps/assets
+apps/output
 data
 logs
 outputs

@@ -58,11 +58,24 @@ Use the ros2 topic to control the UAVs
 ```bash
 # Example to control robot_0
 # Position control
-ros2 topic pub /robot_0/control_cmd std_msgs/Float32MultiArray "{data: [x, y, z]}"
+ros2 topic pub /robot_0/control_cmd std_msgs/Float32MultiArray "{data: [0, x, y, z, yaw]}"
+
+# Velocity control
+ros2 topic pub /robot_0/control_cmd std_msgs/Float32MultiArray "{data: [1, vx, vy, vz, yaw]}"
 
 # Thrust and Angular velocity control
-ros2 topic pub /robot_0/control_cmd std_msgs/Float32MultiArray "{data: [thrust, avx, avy, avz]}"
+ros2 topic pub /robot_0/control_cmd std_msgs/Float32MultiArray "{data: [2, avx, avy, avz, thrust]}"
 ```
+Data format:
+
+[0] - control mode | 0: position control, 1: velocity control, 2: angular velocity control
+
+[1:4] - x, y, z, yaw | position control
+
+[1:4] - vx, vy, vz, yaw | velocity control
+
+[1:4] - avx, avy, avz, thrust | angular velocity control
+
 
 ## ROS2 data interface
 

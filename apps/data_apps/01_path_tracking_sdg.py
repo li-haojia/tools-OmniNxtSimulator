@@ -15,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/data5/haojia/isaac_sim_Data/full_warehouse/trajectory_large.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/trajectory_100.hdf5",
     "sample_interval": 50,
     "start_group": 0,
     "end_group": -1,
@@ -62,14 +62,14 @@ config = {
         ],
     },
     "rt_subframes": 8,
-    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+    "env_url": "file:///workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/MFG/MFG_Factory_Welding_Demo/MFG_Factory_Welding_Demo.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/data5/haojia/isaac_sim_Data/full_warehouse/images",
+        "output_dir": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/path_tracking_sdg",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
-        "colorize_depth": False,
+        "colorize_depth": True,
         "instance_segmentation": False,
         "colorize_instance_segmentation": False,
         "semantic_segmentation": False,
@@ -120,34 +120,80 @@ from data_apps.synthetic_data.path_tracking_sdg_utils import TrajectoryDatabase
 from omni.physx.scripts import physicsUtils
 from omni.isaac.core.utils import prims
 from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles, quat_to_rot_matrix
-from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths
+from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths, add_reference_to_stage
 from omni.isaac.core.utils.semantics import count_semantics_in_scene
 from omni.isaac.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pxr import UsdGeom, Gf, UsdPhysics, PhysxSchema
+from pxr import UsdGeom, Gf, UsdPhysics, Usd, UsdLux
 
-WRITE_THREADS = 64
-QUEUE_SIZE = 1000
-rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
-rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
+def carb_settings():
+    # Detailed settings for the replicator
+    # https://docs.omniverse.nvidia.com/py/replicator/1.11.16/source/extensions/omni.replicator.core/docs/API.html#omni.replicator.core.settings.carb_settings
+    # IO threads and queue size for writing data
+    WRITE_THREADS = 64
+    QUEUE_SIZE = 1000
+    rep.settings.carb_settings("/omni/replicator/backend/writeThreads", WRITE_THREADS)
+    rep.settings.carb_settings("/omni/replicator/backend/queueSize", QUEUE_SIZE)
 
-assets_root_path = get_assets_root_path()
-if assets_root_path is None:
-    carb.log_error("Could not get nucleus server path, closing application..")
-    simulation_app.close()
+    # Ray tracing motion blur settings
+    rep.settings.carb_settings("/omni/replicator/captureOnPlay", False)
+    rep.settings.carb_settings("/omni/replicator/captureMotionBlur", True)
+    rep.settings.carb_settings("/rtx/rendermode", "RayTracedLighting")
+    rep.settings.carb_settings("/rtx/post/aa/op", 3)
+    rep.settings.carb_settings("/rtx/post/motionblur/maxBlurDiameterFraction", 0.02)
+    rep.settings.carb_settings("/rtx/post/motionblur/exposureFraction", 1.0)
+    rep.settings.carb_settings("/rtx/post/motionblur/numSamples", 8)
 
-# Open the given environment in a new stage
-print(f"[scene_based_sdg] Loading Stage {config['env_url']}")
-if not open_stage(assets_root_path + config["env_url"]):
-    carb.log_error(f"Could not open stage{config['env_url']}, closing application..")
-    simulation_app.close()
+    # Light settings
+    rep.settings.carb_settings("/rtx/shadows/enabled", True)
+    rep.settings.carb_settings("/rtx/directLighting/domeLight/enabled", True)
+    rep.settings.carb_settings("/rtx/directLighting/domeLight/enabledInReflections", True)
+
+carb_settings()
+if ":/" not in config["env_url"]:
+    config["env_url"] = get_assets_root_path() + config["env_url"]
+elif "file://" in config["env_url"]:
+    usd_dir = os.path.dirname(config["env_url"].split("file://")[-1])
+    os.chdir(usd_dir) # Avoid issues with relative paths in the USD file
+
+usd_path = config["env_url"]
+prim_path = f"/Env/{usd_path.split('/')[-1].split('.')[0]}"
+print(f"Loading stage at {prim_path}")
+add_reference_to_stage(usd_path, prim_path)
+stage = Usd.Stage.Open(usd_path)
+unit = UsdGeom.GetStageMetersPerUnit(stage)
+print(f"Meters per unit: {unit}")
+
+if unit != 1.0:
+    # Need to scale the stage to match the 1 unit = 1 meter
+    try:
+        stage = omni.usd.get_context().get_stage()
+        root_prim = stage.GetPrimAtPath(prim_path)
+        xform = UsdGeom.Xformable(root_prim)
+        xform.ClearXformOpOrder()
+        xform.AddScaleOp(precision=UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(unit, unit, unit))
+    except Exception as e:
+        print(f"Error scaling stage: {e}")
+        exit(1)
 
 stage = get_current_stage()
-# print_stage_prim_paths(stage)
+root_prim = stage.GetPrimAtPath(prim_path)
+
+# Process lights in the stage
+scene_based_sdg_utils.process_lights(stage, UsdLux.SphereLight, "sphere")
+scene_based_sdg_utils.process_lights(stage, UsdLux.DiskLight, "sphere")
+
+# Load sky
+sky_usd_path = "https://omniverse-content-production.s3.us-west-2.amazonaws.com/Environments/2023_1/DomeLights/Dynamic/CumulusLight.usd"
+rep.create.from_usd(usd=sky_usd_path)
+sky = rep.get.prim_at_path(path="/Replicator/Ref_Xform/Ref/Looks/SkyMaterial/Shader")
 
 # Disable capture on play (data generation will be triggered manually)
 rep.orchestrator.set_capture_on_play(False)
+
+# Load the light prims and make them visible
+scene_based_sdg_utils.register_randomize_sun_light(sky)
 
 # Clear any previous semantic data in the loaded stage
 if config["clear_previous_semantics"]:
@@ -205,69 +251,17 @@ if writer_type not in rep.WriterRegistry.get_writers():
 # see: https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/subframes_examples.html
 rt_subframes = config.get("rt_subframes", -1)
 
-# Set replicator settings (capture only on request and enable motion blur)
-carb.settings.get_settings().set("/omni/replicator/captureOnPlay", False)
-carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", True)
-if config["launch_config"]["renderer"] == "RayTracedLighting":
-    print(f"[MotionBlur] Setting RayTracedLighting render mode motion blur settings")
-    # Setup ray tracing motion blur settings
-    carb.settings.get_settings().set("/rtx/rendermode", "RayTracedLighting")
-    # 0: Disabled, 1: TAA, 2: FXAA, 3: DLSS, 4:RTXAA
-    carb.settings.get_settings().set("/rtx/post/aa/op", 3)
-    # (float): The fraction of the largest screen dimension to use as the maximum motion blur diameter.
-    carb.settings.get_settings().set("/rtx/post/motionblur/maxBlurDiameterFraction", 0.1)
-    # (float): Exposure time fraction in frames (1.0 = one frame duration) to sample.
-    carb.settings.get_settings().set("/rtx/post/motionblur/exposureFraction", 1.0)
-    # (int): Number of samples to use in the filter. A higher number improves quality at the cost of performance.
-    carb.settings.get_settings().set("/rtx/post/motionblur/numSamples", 4)
-else:
-    print(f"[MotionBlur] Setting PathTracing render mode motion blur settings")
-    carb.settings.get_settings().set("/rtx/rendermode", "PathTracing")
-    # (int): Total number of samples for each rendered pixel, per frame.
-    carb.settings.get_settings().set("/rtx/pathtracing/spp", 64)
-    # (int): Maximum number of samples to accumulate per pixel. When this count is reached the rendering stops until a scene or setting change is detected, restarting the rendering process. Set to 0 to remove this limit.
-    carb.settings.get_settings().set("/rtx/pathtracing/totalSpp", 64)
-    carb.settings.get_settings().set("/rtx/pathtracing/optixDenoiser/enabled", 0)
-    # Number of sub samples to render if in PathTracing render mode and motion blur is enabled.
-    carb.settings.get_settings().set("/omni/replicator/pathTracedMotionBlurSubSamples", 4)
-   
-# Enables rigid body dynamics (physics simulation) on the prim
-def enable_dynamics(prim, disable_gravity=False, angular_damping=None):
-    # Physics
-    if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
-        rigid_body_api = UsdPhysics.RigidBodyAPI.Apply(prim)
-    else:
-        rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-    rigid_body_api.CreateRigidBodyEnabledAttr(True)
-    # PhysX
-    if not prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
-        physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
-    else:
-        physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI(prim)
-    physx_rigid_body_api.GetDisableGravityAttr().Set(disable_gravity)
-    if angular_damping is not None:
-        physx_rigid_body_api.CreateAngularDampingAttr().Set(angular_damping)
-      
-physx_scene = None
-for prim in stage.Traverse():
-    if prim.IsA(UsdPhysics.Scene):
-        physx_scene = PhysxSchema.PhysxSceneAPI.Apply(prim)
-        break
-if physx_scene is None:
-    print(f"[MotionBlur] Creating a new PhysicsScene")
-    physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
-    physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
-
-
-enable_dynamics(cameras_xform_prim, disable_gravity=True)
-for camera_prim_path in each_camera_xform_prim_paths:
-    print(camera_prim_path)
-    enable_dynamics(stage.GetPrimAtPath(camera_prim_path), disable_gravity=True)
+# Setup the randomizations to be triggered every frame
+with rep.trigger.on_frame(interval=10):
+    rep.randomizer.randomize_sun_light()
 
 # Start the SDG
 # Enable the render products for SDG
 for rp in render_products:
     rp.hydra_texture.set_updates_enabled(True)
+
+for _ in range(50):
+    rep.orchestrator.step(delta_time=0.1, rt_subframes=rt_subframes)
 
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
@@ -278,70 +272,60 @@ for _ in range(10):
     rep.orchestrator.step(rt_subframes=rt_subframes)
     
 def process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes):
-    # Setup the writer for the current group
-    writer = rep.WriterRegistry.get(writer_type)
-    writer_kwargs = config["writer_config"].copy()
-    writer_kwargs["output_dir"] = os.path.join(writer_kwargs["output_dir"], f"group_{group_num}")
-    print(f"[scene_based_sdg] Initializing {writer_type} with: {writer_kwargs}")
-    writer.initialize(**writer_kwargs)
-    writer.attach(render_products)
+    try:
+        # Setup the writer for the current group
+        writer = rep.WriterRegistry.get(writer_type)
+        writer_kwargs = config["writer_config"].copy()
+        writer_kwargs["output_dir"] = os.path.join(writer_kwargs["output_dir"], f"group_{group_num}")
+        print(f"[scene_based_sdg] Initializing {writer_type} with: {writer_kwargs}")
+        writer.initialize(**writer_kwargs)
+        writer.attach(render_products)
 
-    # Load the trajectory for the current group
-    trajectory = db.getTrajectory(group_num)
-    interval = config.get("sample_interval", 100)
-    used_samples = []
-    for sample_counter in range(len(trajectory)):
-        if sample_counter % interval != 0:
-            continue
-        timestamp = trajectory.getTimestamp()[sample_counter]
-        position = trajectory.getPosbyIndex(sample_counter)  # numpy array
-        orientation = trajectory.getQuaternionbyIndex(sample_counter) # numpy array [w, x, y, z]
-        rotation = quat_to_euler_angles(orientation) * 180 / math.pi
-        velocity = trajectory.getVelbyIndex(sample_counter) # numpy array
-        omega = trajectory.getOmgbyIndex(sample_counter) * 180 / math.pi  # numpy array
+        # Load the trajectory for the current group
+        trajectory = db.getTrajectory(group_num)
+        interval = config.get("sample_interval", 100)
+        used_samples = []
+        for sample_counter in range(len(trajectory)):
+            if sample_counter % interval != 0:
+                continue
+            timestamp = trajectory.getTimestamp()[sample_counter]
+            position = trajectory.getPosbyTimestamp(timestamp)  # numpy array
+            orientation = trajectory.getQuaternionbyTimestamp(timestamp)  # numpy array [w, x, y, z]
+            rotation = quat_to_euler_angles(orientation) * 180 / math.pi
+            velocity = trajectory.getVelbyTimestamp(timestamp)  # numpy array
+            omega = trajectory.getOmgbyTimestamp(timestamp) * 180 / math.pi  # numpy array
 
-        # with cameras_xform:
-        #     rep.modify.pose(
-        #         position=position,
-        #         rotation=quat_to_euler_angles(orientation) * 180 / math.pi,
-        #     )
-        #     rep.physics.rigid_body(
-        #         velocity=(float(velocity[0]), float(velocity[1]), float(velocity[2])),
-        #         angular_velocity=(float(omega[0]), float(omega[1]), float(omega[2])),
-        #     )
-        
-        xform_api = UsdGeom.Xformable(cameras_xform_prim)
-        xform_api.ClearXformOpOrder()
-        xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
-        xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
+            xform_api = UsdGeom.Xformable(cameras_xform_prim)
+            xform_api.ClearXformOpOrder()
+            xform_api.AddTranslateOp().Set(Gf.Vec3d(position[0], position[1], position[2]))
+            xform_api.AddRotateXYZOp().Set(Gf.Vec3d(rotation[0], rotation[1], rotation[2]))
 
-        # physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
-        # physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
-        # physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
-        cameras_xform_prim.GetAttribute("physics:velocity").Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
-        cameras_xform_prim.GetAttribute("physics:angularVelocity").Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
+            physics_api = UsdPhysics.RigidBodyAPI.Apply(cameras_xform_prim)
+            physics_api.CreateVelocityAttr().Set(Gf.Vec3f(float(velocity[0]), float(velocity[1]), float(velocity[2])))
+            physics_api.CreateAngularVelocityAttr().Set(Gf.Vec3f(float(omega[0]), float(omega[1]), float(omega[2])))
 
-        # Update the physics state
-        next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
-        dt = next_timestamp - timestamp
-        start_time = time.time()
-        dt = None
-        rep.orchestrator.step(rt_subframes=rt_subframes)
-        print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
-        used_samples.append(sample_counter)
-    
-    # Save the trajectory information
-    if config.get("save_trajectory_info", True):
-        trajectory_info = {
-            "group_num": group_num,
-            "used_samples": used_samples,
-        }
+            # Update the physics state
+            next_timestamp = trajectory.getTimestamp()[sample_counter + 1] if sample_counter + 1 < len(trajectory) else timestamp
+            dt = next_timestamp - timestamp
+            start_time = time.time()
+            rep.orchestrator.step(delta_time=dt, rt_subframes=rt_subframes)
+            print(f"[scene_based_sdg] Group: {group_num}, Timestamp: {timestamp:.2f}s, Processing time: {time.time() - start_time:.2f}s")
+
+        # Save the trajectory information
+        if config.get("save_trajectory_info", True):
+            trajectory_info = {
+                "trajectory_path": config["trajectory_path"],
+                "group_num": group_num,
+                "used_samples": used_samples,
+            }
         with open(os.path.join(writer_kwargs["output_dir"], "trajectory_info.json"), "w") as f:
             json.dump(trajectory_info, f)
-    # Wait for the data to be written to disk
-    rep.orchestrator.wait_until_complete()
-    # Cleanup the writer
-    writer.detach()
+        # Wait for the data to be written to disk
+        rep.orchestrator.wait_until_complete()
+        # Cleanup the writer
+        writer.detach()
+    except Exception as e:
+        print(f"[scene_based_sdg] Error in group {group_num}: {e}")
 
 def main():
     # Process each group in a separate process
@@ -355,6 +339,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except Exception as e:
+        print(f"[scene_based_sdg] Error: {e}")
     finally:
         # Cleanup render products
         for rp in render_products:
