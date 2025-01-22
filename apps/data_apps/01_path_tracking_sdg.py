@@ -213,7 +213,6 @@ cameras_xform_prim = stage.GetPrimAtPath(cameras_xform_path)
 # Create cameras and render products
 camera_prims = []
 render_products = []
-each_camera_xform_prim_paths = []
 for camera_config in config["robot"]["cameras"]:
     rotation_euler = quat_to_euler_angles(camera_config["quaternion"]) * (180 / math.pi)
     projection_type = (
@@ -236,8 +235,7 @@ for camera_config in config["robot"]["cameras"]:
         resolution=camera_config["resolution"],
         name=camera_config["name"],
     )
-    each_camera_xform_prim_paths.append(cameras_xform_path + "/" + camera_config["name"]+"_Xform")
-    render_product.hydra_texture.set_updates_enabled(True)
+    render_product.hydra_texture.set_updates_enabled(False)
     camera_prims.append(camera_prim)
     render_products.append(render_product)
 
@@ -266,11 +264,6 @@ for _ in range(50):
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
 db = TrajectoryDatabase(config["trajectory_path"])
-
-for _ in range(10):
-    simulation_app.update()
-    rep.orchestrator.step(rt_subframes=rt_subframes)
-    
 def process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes):
     try:
         # Setup the writer for the current group
