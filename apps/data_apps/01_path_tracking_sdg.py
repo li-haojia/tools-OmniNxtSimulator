@@ -15,39 +15,39 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/data/warehouse_with_forks/trajectory_small.hdf5",
-    "sample_interval": 10,
+    "trajectory_path": "/data5/haojia/isaac_sim_Data/full_warehouse/trajectory_large.hdf5",
+    "sample_interval": 50,
+    "start_group": 0,
+    "end_group": -1,
     "robot": {
         "url": "/workspace/isaaclab/user_apps/data_apps/assets/OmniNxt_sdg_color.usd",
         "mass": 0.85,
         "radius": 0.15,
-        "cameras": [{
+              "cameras": [{
                 "name": "left_front_camera",
                 "position": [0.0735, 0.0735, 0.067],
-                "quaternion": [ 0.924, 0, 0, 0.383],
+                "quaternion": [ 0.383, 0, 0, 0.924], #[ 0.924, 0, 0, 0.383],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
             }, {
                 "name": "right_front_camera",
                 "position": [0.0735, -0.0735, 0.067],
-                "quaternion": [  0.924, 0, 0, -0.383],
+                "quaternion": [ 0.383, 0, 0, -0.924],#[  0.924, 0, 0, -0.383],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
             }, {
                 "name": "right_back_camera",
                 "position": [-0.0735, -0.0735, 0.067],
-                "quaternion": [ 0.383, 0, 0, -0.924],
+                "quaternion": [  0.924, 0, 0, -0.383], #[ 0.383, 0, 0, -0.924],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
-                "shutter_open": 0.0,
-                "shutter_close": 1.0,
             }, {
                 "name": "left_back_camera",
                 "position": [-0.0735, 0.0735, 0.067],
-                "quaternion": [ 0.383, 0, 0, 0.924],
+                "quaternion":  [ 0.924, 0, 0, 0.383], #[ 0.383, 0, 0, 0.924],
                 "resolution": [1280, 720],
                 "camera_model": "fisheye",
                 "fov": 200.0,
@@ -62,10 +62,10 @@ config = {
         ],
     },
     "rt_subframes": 8,
-    "env_url": "/Isaac/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
+    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/assets/data/warehouse_with_forks/images",
+        "output_dir": "/data5/haojia/isaac_sim_Data/full_warehouse/images",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
@@ -74,12 +74,12 @@ config = {
         "colorize_instance_segmentation": False,
         "semantic_segmentation": False,
         "colorize_semantic_segmentation": False,
-        "bounding_box_2d_tight": False,
-        "bounding_box_3d": False,
+        "bounding_box_2d_tight": True,
+        "bounding_box_3d": True,
     },
     "save_trajectory_info": True,
     "clear_previous_semantics": False,
-    "close_app_after_run": False,
+    "close_app_after_run": True,
 }
 
 import carb
@@ -272,6 +272,11 @@ for rp in render_products:
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")
 db = TrajectoryDatabase(config["trajectory_path"])
+
+for _ in range(10):
+    simulation_app.update()
+    rep.orchestrator.step(rt_subframes=rt_subframes)
+    
 def process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes):
     # Setup the writer for the current group
     writer = rep.WriterRegistry.get(writer_type)
@@ -340,7 +345,11 @@ def process_group(group_num, db, config, writer_type, render_products, cameras_x
 
 def main():
     # Process each group in a separate process
-    for group_num in range(len(db)):
+    start_group = config.get("start_group", 0)
+    end_group = config.get("end_group", -1)
+    if end_group == -1:
+        end_group = len(db)
+    for group_num in range(start_group, end_group):
         process_group(group_num, db, config, writer_type, render_products, cameras_xform, rt_subframes)
 
 if __name__ == "__main__":
