@@ -181,6 +181,7 @@ stage = get_current_stage()
 root_prim = stage.GetPrimAtPath(prim_path)
 
 # Process lights in the stage
+scene_based_sdg_utils.hide_prims_containing_string(stage, "grass")
 scene_based_sdg_utils.process_lights(stage, UsdLux.SphereLight, "sphere")
 scene_based_sdg_utils.process_lights(stage, UsdLux.DiskLight, "sphere")
 
@@ -258,8 +259,10 @@ with rep.trigger.on_frame(interval=10):
 for rp in render_products:
     rp.hydra_texture.set_updates_enabled(True)
 
-for _ in range(50):
-    rep.orchestrator.step(delta_time=0.1, rt_subframes=rt_subframes)
+prepare_time = 5
+for i in range(prepare_time):
+    rep.orchestrator.step(delta_time=1.0, rt_subframes=-1)
+    print(f"[scene_based_sdg] Waiting for the render products to be ready... {i}/{prepare_time}")
 
 env_semantics = count_semantics_in_scene("/Root")
 print(f"[scene_based_sdg] Number of semantics in the environment: {env_semantics}")

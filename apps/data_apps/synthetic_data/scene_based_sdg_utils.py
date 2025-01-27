@@ -19,7 +19,20 @@ from omni.isaac.core.utils import prims
 from omni.isaac.core.utils.bounds import compute_combined_aabb, compute_obb, create_bbox_cache, get_obb_corners
 from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles
 from omni.isaac.core.utils.semantics import remove_all_semantics
+from omni.isaac.core.utils.prims import is_prim_path_valid, set_prim_visibility
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
+
+# Hide all prims containing a specific string in their path
+def hide_prims_containing_string(stage, string_to_search):
+    all_prims = stage.TraverseAll()
+
+    for prim in all_prims:
+        prim_path = prim.GetPrimPath()
+        prim_path_str = str(prim_path)
+        if string_to_search.lower() in prim_path_str.lower():
+            if is_prim_path_valid(prim_path):
+                set_prim_visibility(prim, visible=False)
+                print(f"Set {prim_path} to be invisible.")
 
 # Process lights in the stage and create them in the replicator
 def process_lights(stage, usd_light_class, create_type):
@@ -31,8 +44,11 @@ def process_lights(stage, usd_light_class, create_type):
         create_type: Replicator create type for the light, either "sphere" or "disk".
     """
     light_prims = [prim for prim in stage.Traverse() if prim.IsA(usd_light_class)]
-
+    total_lights = len(light_prims)
+    current_light = 0
     for prim in light_prims:
+        print(f"[scene_based_sdg] Processing light {current_light + 1}/{total_lights}: {prim.GetPrimPath()}")
+        current_light += 1
         # Get the light position and rotation
         transform = omni.usd.get_world_transform_matrix(prim)
         transform = transform.GetOrthonormalized(issueWarning=True)
