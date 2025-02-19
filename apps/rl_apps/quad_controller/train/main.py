@@ -10,7 +10,7 @@
 import argparse
 import sys
 
-from omni.isaac.lab.app import AppLauncher
+from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RL-Games.")
@@ -54,25 +54,25 @@ from rl_games.common import env_configurations, vecenv
 from rl_games.common.algo_observer import IsaacAlgoObserver
 from rl_games.torch_runner import Runner
 
-from omni.isaac.lab.envs import (
+from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
     multi_agent_to_single_agent,
 )
-from omni.isaac.lab.utils.assets import retrieve_file_path
-from omni.isaac.lab.utils.dict import print_dict
-from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
+from isaaclab.utils.assets import retrieve_file_path
+from isaaclab.utils.dict import print_dict
+from isaaclab.utils.io import dump_pickle, dump_yaml
 
-import omni.isaac.lab_tasks  # noqa: F401
-from omni.isaac.lab_tasks.utils.hydra import hydra_task_config
-from omni.isaac.lab_tasks.utils.wrappers.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.hydra import hydra_task_config
+from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
 
 import yaml
 from quad_env import QuadcopterEnvCfg, QuadcopterWithYawEnv
 from vehicles.omninxt import OmniNxt
-from omni.isaac.lab.scene import InteractiveSceneCfg
+from isaaclab.scene import InteractiveSceneCfg
 OmniNxt = OmniNxt(id=0, init_pos=(0.0, 0.0, 2), enable_cameras=True)
 
 def read_yaml_to_dict(file_path):
@@ -84,7 +84,7 @@ agent_cfg_path = f"{os.path.dirname(__file__)}/../cfg/rl_games_ppo_cfg.yaml"
 # @hydra_task_config(args_cli.task, "rl_games_cfg_entry_point")
 # def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
 def main():
-    args_cli.checkpoint = "/workspace/isaaclab/user_apps/logs/rl_games/quadcopter_direct/2024-12-12_18-12-35/nn/quadcopter_direct.pth"
+    # args_cli.checkpoint = ""
     env_cfg = QuadcopterEnvCfg()
     agent_cfg = read_yaml_to_dict(agent_cfg_path)
     env_cfg.scene = InteractiveSceneCfg(num_envs=512, env_spacing=3, replicate_physics=True)

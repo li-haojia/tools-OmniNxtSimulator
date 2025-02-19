@@ -15,7 +15,7 @@ config = {
         "renderer": "RayTracedLighting",
         "headless": True,
     },
-    "trajectory_path": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/trajectory_100.hdf5",
+    "trajectory_path": "/workspace/isaaclab/user_apps/data_apps/assets/full_warehouse/trajectory_small.hdf5",
     "sample_interval": 50,
     "start_group": 0,
     "end_group": -1,
@@ -62,10 +62,10 @@ config = {
         ],
     },
     "rt_subframes": 8,
-    "env_url": "file:///workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/MFG/MFG_Factory_Welding_Demo/MFG_Factory_Welding_Demo.usd",
+    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "BasicWriter",
     "writer_config": {
-        "output_dir": "/workspace/isaaclab/user_apps/assets/MFG_Factory_Welding_Demo/path_tracking_sdg",
+        "output_dir": "/workspace/isaaclab/user_apps/data_apps/assets/full_warehouse/path_tracking_sdg",
         "camera_params": True,
         "rgb": True,
         "distance_to_camera": True,
@@ -118,11 +118,11 @@ import omni.usd
 import data_apps.synthetic_data.scene_based_sdg_utils as scene_based_sdg_utils
 from data_apps.synthetic_data.path_tracking_sdg_utils import TrajectoryDatabase
 from omni.physx.scripts import physicsUtils
-from omni.isaac.core.utils import prims
-from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles, quat_to_rot_matrix
-from omni.isaac.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths, add_reference_to_stage
-from omni.isaac.core.utils.semantics import count_semantics_in_scene
-from omni.isaac.nucleus import get_assets_root_path
+from isaacsim.core.utils import prims
+from isaacsim.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles, quat_to_rot_matrix
+from isaacsim.core.utils.stage import get_current_stage, open_stage, print_stage_prim_paths, add_reference_to_stage
+from isaacsim.core.utils.semantics import count_semantics_in_scene
+from isaacsim.core.utils.nucleus import get_assets_root_path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from pxr import UsdGeom, Gf, UsdPhysics, Usd, UsdLux

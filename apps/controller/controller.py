@@ -3,6 +3,7 @@ from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Odometry
 import numpy as np
 import threading
+import logging
 
 from .uav_controller import UAVController
 
@@ -39,6 +40,10 @@ class Controller:
         position_control_flag = False
         velocity_control_flag = False
         angular_velocity_control_flag = False
+
+        if len(self.control_data.data) != 5:
+            print(f"Invalid control command. Data: {self.control_data.data}")
+            return
 
         if self.control_data.data[0] == 0:
             position_control_flag = True

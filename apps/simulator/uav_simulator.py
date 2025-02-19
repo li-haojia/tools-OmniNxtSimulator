@@ -1,24 +1,18 @@
 import threading
 import torch
 import logging
-import numpy as np
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 import rclpy
-from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Odometry
 
 import omni
-import omni.isaac.lab.sim as sim_utils
-from omni.isaac.core import World
-from omni.isaac.core.utils.stage import add_reference_to_stage
-import omni.isaac.core.utils.stage as stage_utils
-from omni.isaac.lab.assets import Articulation
-from omni.isaac.lab.sim import SimulationContext
-from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
-from omni.isaac.lab.app import AppLauncher
+import isaaclab.sim as sim_utils
+from isaacsim.core.utils.stage import add_reference_to_stage
+from isaaclab.assets import Articulation
+from isaaclab.sim import SimulationContext
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from pxr import UsdGeom, Usd
 
 from controller.controller import Controller
@@ -106,7 +100,6 @@ class UAVSimulation:
             root_prim = stage.GetPrimAtPath(prim_path)
             xform = UsdGeom.Xformable(root_prim)
             xform.AddScaleOp().Set((unit, unit, unit))
-        
         logging.info("Environment loaded into the simulation.")
 
     def prepare_simulation(self):
@@ -122,8 +115,8 @@ class UAVSimulation:
             quadrotor.robot_instance_.write_joint_state_to_sim(joint_pos, joint_vel)
             quadrotor.robot_instance_.write_root_pose_to_sim(quadrotor.robot_instance_.data.default_root_state[:, :7])
             quadrotor.robot_instance_.write_root_velocity_to_sim(quadrotor.robot_instance_.data.default_root_state[:, 7:])
-            quadrotor.prop_forces = []
-            quadrotor.prop_torques = []
+            quadrotor.prop_forces = [0.0, 0.0, 0.0, 0.0]
+            quadrotor.prop_torques = [0.0, 0.0, 0.0, 0.0]
             quadrotor.robot_instance_.reset()
 
     def ros_spin(self):
@@ -215,8 +208,8 @@ class UAVSimulation:
         forces = torch.zeros((1, 4, 3), device=self.sim.device)
         torques = torch.zeros_like(forces)
 
-        forces[0, :, 2] = torch.tensor(robot.prop_forces)
-        torques[0, :, 2] = torch.tensor(robot.prop_torques)
+        forces[0, :, 2] = torch.tensor(robot.prop_forces, device=self.sim.device)
+        torques[0, :, 2] = torch.tensor(robot.prop_torques, device=self.sim.device)
 
         prop_body_ids = robot.robot_instance_.find_bodies("rotor.*")[0]
         robot.robot_instance_.set_external_force_and_torque(forces, torques, body_ids=prop_body_ids)

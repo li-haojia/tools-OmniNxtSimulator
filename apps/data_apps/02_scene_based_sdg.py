@@ -95,10 +95,10 @@ import omni.usd
 
 # Custom util functions for the example
 import data_apps.synthetic_data.scene_based_sdg_utils as scene_based_sdg_utils
-from omni.isaac.core.utils import prims
-from omni.isaac.core.utils.rotations import euler_angles_to_quat
-from omni.isaac.core.utils.stage import get_current_stage, open_stage
-from omni.isaac.nucleus import get_assets_root_path
+from isaacsim.core.utils import prims
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.stage import get_current_stage, open_stage
+from isaacsim.core.utils.nucleus import get_assets_root_path
 from pxr import Gf
 
 # Get server path

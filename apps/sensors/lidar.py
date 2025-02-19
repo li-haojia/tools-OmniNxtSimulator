@@ -1,6 +1,6 @@
 import carb
 import omni.graph.core as og
-from omni.isaac.sensor import LidarRtx
+from isaacsim.sensors.rtx import LidarRtx
 
 from simulator.tf import ROS2StaticTFPub
 
@@ -56,10 +56,10 @@ class ROS2Lidar:
         graph_config = {
             keys.CREATE_NODES: [
                 ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-                ("isaac_run_one_simulation_frame", "omni.isaac.core_nodes.OgnIsaacRunOneSimulationFrame"),
-                ("isaac_create_render_product", "omni.isaac.core_nodes.IsaacCreateRenderProduct"),
-                ("ros2_rtx_lidar_point_helper", "omni.isaac.ros2_bridge.ROS2RtxLidarHelper"),
-                ("ros2_rtx_lidar_scan_helper", "omni.isaac.ros2_bridge.ROS2RtxLidarHelper"),
+                ("isaac_run_one_simulation_frame", "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame"),
+                ("isaac_create_render_product", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                ("ros2_rtx_lidar_point_helper", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
+                ("ros2_rtx_lidar_scan_helper", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
             ],
             keys.CONNECT: [
                 ("on_playback_tick.outputs:tick", "isaac_run_one_simulation_frame.inputs:execIn"),

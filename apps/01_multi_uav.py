@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from omni.isaac.lab.app import AppLauncher
+from isaaclab.app import AppLauncher
 def parse_arguments():
     """Parse command-line arguments.
 
@@ -17,9 +17,9 @@ app_launcher = AppLauncher(parse_arguments())
 simulation_app = app_launcher.app
 
 # Enable ROS2 bridge extension
-from omni.isaac.core.utils import extensions
-from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
-extensions.enable_extension("omni.isaac.ros2_bridge")
+from isaacsim.core.utils import extensions
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+extensions.enable_extension("isaacsim.ros2.bridge")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -48,8 +48,8 @@ def generate_quadrotors(num_robots):
 def main():
     """Main entry point for the simulation."""
     env_usd_paths = [
-        # f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
-        f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
+        f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Warehouse/warehouse_with_forklifts.usd",
+        # f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd",
         # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/TowerDemopack/World_TowerDemopack.usd",
         # f"/workspace/isaaclab/user_apps/assets/Demos/AEC/TowerDemo/CityDemopack/World_CityDemopack.usd",
     ]
