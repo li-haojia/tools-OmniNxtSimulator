@@ -13,13 +13,13 @@ import random
 import numpy as np
 import omni.replicator.core as rep
 import omni.usd
-from omni.isaac.core import World
-from omni.isaac.core.prims.rigid_prim import RigidPrim
-from omni.isaac.core.utils import prims
-from omni.isaac.core.utils.bounds import compute_combined_aabb, compute_obb, create_bbox_cache, get_obb_corners
-from omni.isaac.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles
-from omni.isaac.core.utils.semantics import remove_all_semantics
-from omni.isaac.core.utils.prims import is_prim_path_valid, set_prim_visibility
+from isaacsim.core.api import World
+from isaacsim.core.prims import SingleRigidPrim
+from isaacsim.core.utils import prims
+from isaacsim.core.utils.bounds import compute_combined_aabb, compute_obb, create_bbox_cache, get_obb_corners
+from isaacsim.core.utils.rotations import euler_angles_to_quat, quat_to_euler_angles
+from isaacsim.core.utils.semantics import remove_all_semantics
+from isaacsim.core.utils.prims import is_prim_path_valid, set_prim_visibility
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
 
 # Hide all prims containing a specific string in their path
@@ -117,7 +117,7 @@ def simulate_falling_objects(forklift_prim, assets_root_path, config, max_sim_st
 
     # Wrap the pallet as simulation ready with a simplified collider
     add_colliders(pallet_prim, approx_type="boundingCube")
-    pallet_rigid_prim = RigidPrim(prim_path=str(pallet_prim.GetPrimPath()))
+    pallet_rigid_prim = SingleRigidPrim(prim_path=str(pallet_prim.GetPrimPath()))
     pallet_rigid_prim.enable_rigid_body_physics()
 
     # Use the height of the pallet as a spawn base for the boxes
@@ -142,7 +142,7 @@ def simulate_falling_objects(forklift_prim, assets_root_path, config, max_sim_st
 
         # Wrap the prim as simulation ready with a simplified collider
         add_colliders(box_prim, approx_type="boundingCube")
-        box_rigid_prim = RigidPrim(prim_path=str(box_prim.GetPrimPath()))
+        box_rigid_prim = SingleRigidPrim(prim_path=str(box_prim.GetPrimPath()))
         box_rigid_prim.enable_rigid_body_physics()
 
         # Cache the rigid prim

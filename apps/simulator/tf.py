@@ -17,9 +17,9 @@ class ROS2TFPub:
         # graph_config = {
         #     keys.CREATE_NODES: [
         #         ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-        #         ("isaac_read_simulation_time", "omni.isaac.core_nodes.IsaacReadSimulationTime"),
-        #         ("isaac_compute_odometry_node", "omni.isaac.core_nodes.IsaacComputeOdometry"),
-        #         ("ros2_publish_raw_transform_tree", "omni.isaac.ros2_bridge.ROS2PublishRawTransformTree"),
+        #         ("isaac_read_simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+        #         ("isaac_compute_odometry_node", "isaacsim.core.nodes.IsaacComputeOdometry"),
+        #         ("ros2_publish_raw_transform_tree", "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
         #     ],
         #     keys.CONNECT: [
         #         ("on_playback_tick.outputs:tick", "isaac_compute_odometry_node.inputs:execIn"),
@@ -38,8 +38,8 @@ class ROS2TFPub:
         graph_config = {
             keys.CREATE_NODES: [
                 ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-                ("isaac_read_simulation_time", "omni.isaac.core_nodes.IsaacReadSimulationTime"),
-                ("ros2_publish_transform_tree", "omni.isaac.ros2_bridge.ROS2PublishTransformTree")
+                ("isaac_read_simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                ("ros2_publish_transform_tree", "isaacsim.ros2.bridge.ROS2PublishTransformTree")
             ],
             keys.CONNECT: [
                 ("on_playback_tick.outputs:tick", "ros2_publish_transform_tree.inputs:execIn"),
@@ -72,8 +72,8 @@ class ROS2StaticTFPub:
         graph_config = {
             keys.CREATE_NODES: [
                 ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-                ("isaac_read_simulation_time", "omni.isaac.core_nodes.IsaacReadSimulationTime"),
-                ("ros2_publish_raw_transform_tree", "omni.isaac.ros2_bridge.ROS2PublishRawTransformTree"),
+                ("isaac_read_simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                ("ros2_publish_raw_transform_tree", "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
             ],
             keys.CONNECT: [
                 ("on_playback_tick.outputs:tick", "ros2_publish_raw_transform_tree.inputs:execIn"),

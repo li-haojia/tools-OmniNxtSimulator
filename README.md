@@ -2,6 +2,11 @@
 
 [OmniNxt](https://hkust-aerial-robotics.github.io/OmniNxt/) simulator based on Isaac Lab
 
+## Version
+- Isaac Sim: 4.5.0
+- Isaac Lab: 2.0
+- ROS2: Humble
+
 ## Setup
 
 ### Requirements
@@ -46,7 +51,7 @@ git lfs pull
 cd user_apps
 ./gui.sh 00_single_uav.py
 
-# Native Streaming
+# Streaming
 cd user_apps
 ./stream.sh 00_single_uav.py
 ```

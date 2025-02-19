@@ -111,8 +111,8 @@ import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
 import usdrt
-from omni.isaac.core.utils.semantics import add_update_semantics, remove_all_semantics
-from omni.isaac.nucleus import get_assets_root_path
+from isaacsim.core.utils.semantics import add_update_semantics, remove_all_semantics
+from isaacsim.core.utils.nucleus import get_assets_root_path
 from omni.physx import get_physx_interface, get_physx_scene_query_interface
 from pxr import PhysxSchema, Sdf, UsdGeom, UsdPhysics
 

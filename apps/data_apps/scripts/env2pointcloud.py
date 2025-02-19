@@ -7,7 +7,7 @@ Run the script using the following command:
 import omni
 import argparse
 import asyncio
-from omni.isaac.lab.app import AppLauncher
+from isaaclab.app import AppLauncher
 def parse_arguments():
     """Parse command-line arguments.
 
@@ -22,16 +22,16 @@ def parse_arguments():
 app_launcher = AppLauncher(parse_arguments())
 simulation_app = app_launcher.app
 
-from omni.isaac.core.utils.extensions import enable_extension
-enable_extension("omni.isaac.occupancy_map")
+from isaacsim.core.utils.extensions import enable_extension
+enable_extension("isaacsim.asset.gen.omap")
 simulation_app.update()
-from omni.isaac.core.utils.stage import get_current_stage, add_reference_to_stage
-from omni.isaac.lab.utils.assets import ISAAC_NUCLEUS_DIR
-from omni.isaac.occupancy_map.bindings import _occupancy_map
-from omni.isaac.nucleus import get_assets_root_path
-from omni.isaac.lab.sim import SimulationContext
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaacsim.asset.gen.omap.bindings import _omap
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from isaaclab.sim import SimulationContext
 from omni.kit.async_engine import run_coroutine
-import omni.isaac.lab.sim as sim_utils
+import isaaclab.sim as sim_utils
 from pxr import Gf, UsdGeom, Usd, UsdPhysics
 import numpy as np
 import textwrap
@@ -158,7 +158,7 @@ async def process_sub_box(id, total_sub_boxes, min_range, max_range, cell_size, 
             await omni.kit.app.get_app().next_update_async()
             timeline.play()
             await omni.kit.app.get_app().next_update_async()
-            occupancy_map = _occupancy_map.Generator(physx, stage_id)
+            occupancy_map = _omap.Generator(physx, stage_id)
             occupancy_map.update_settings(cell_size, 4, 5, 6)
             occupancy_map.set_transform(origin, min_range, max_range)
             occupancy_map.generate3d()

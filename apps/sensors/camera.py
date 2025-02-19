@@ -1,6 +1,6 @@
 import carb
 import omni.graph.core as og
-from omni.isaac.sensor import Camera
+from isaacsim.sensors.camera import Camera
 
 from simulator.tf import ROS2StaticTFPub
 
@@ -101,8 +101,8 @@ class ROS2Camera:
         graph_config = {
             keys.CREATE_NODES: [
                 ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-                ("isaac_create_render_product", "omni.isaac.core_nodes.IsaacCreateRenderProduct"),
-                ("camera_info_helper", "omni.isaac.ros2_bridge.ROS2CameraInfoHelper"),
+                ("isaac_create_render_product", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                ("camera_info_helper", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
             ],
             keys.CONNECT: [
                 ("on_playback_tick.outputs:tick", "isaac_create_render_product.inputs:execIn"),
@@ -125,7 +125,7 @@ class ROS2Camera:
         for camera_type in self.types:
             camera_helper_name = f"camera_helper_{camera_type}"
             graph_config[keys.CREATE_NODES] += [
-                (camera_helper_name, "omni.isaac.ros2_bridge.ROS2CameraHelper")
+                (camera_helper_name, "isaacsim.ros2.bridge.ROS2CameraHelper")
             ]
             graph_config[keys.CONNECT] += [
                 ("isaac_create_render_product.outputs:execOut", f"{camera_helper_name}.inputs:execIn"),
