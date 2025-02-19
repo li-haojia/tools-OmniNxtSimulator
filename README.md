@@ -24,7 +24,7 @@ sudo git config --system --remove-section filter.lfs
 # if you have a previous user-wide configuration
 git config --global --remove-section filter.lfs
 
-git clone https://github.com/D2SLAM-Fusion/tools-OmniNxtSimulator.git
+git clone https://github.com/UAV-Swarm/tools-OmniNxtSimulator.git
 cd tools-OmniNxtSimulator
 git lfs install
 git config lfs.url "https://public:Public123@repo.hkust-uav.online/artifactory/api/lfs/swarm-lfs"
