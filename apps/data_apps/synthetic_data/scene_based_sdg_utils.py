@@ -268,9 +268,9 @@ def register_randomize_lights(prim_paths):
         return lights.node
     rep.randomizer.register(randomize_lights_intensities)
 
-def register_randomize_sun_light(sky):
+def register_randomize_sun_light(sky, lower=0.5, upper=23.5):
     def randomize_sun_light():
         with sky:
             rep.modify.attribute(name="inputs:SunPositionFromTOD",value=True)
-            rep.modify.attribute(name="inputs:TimeOfDay",value=rep.distribution.uniform(lower=0.5,upper=23.5))
+            rep.modify.attribute(name="inputs:TimeOfDay",value=rep.distribution.uniform(lower=lower,upper=upper))
     rep.randomizer.register(randomize_sun_light)
