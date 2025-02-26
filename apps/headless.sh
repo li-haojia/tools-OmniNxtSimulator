@@ -31,7 +31,4 @@ TARGET_SCRIPT=$1
 SCRIPT_ARGS=${@:2}
 check_exts_dir
 check_target_script $TARGET_SCRIPT
-$SCRIPT_DIR/../isaaclab.sh -p $TARGET_SCRIPT $SCRIPT_ARGS --kit_args "--enable isaacsim.ros2.bridge"
-
-# Tracy profiler
-# --enable omni.kit.profiler.tracy --/profiler/enabled=true --/app/profilerBackend=tracy --/privacy/externalBuild=0 --/app/profileFromStart=true --/profiler/gpu=true --/profiler/gpu/tracyInject/enabled=true --/profiler/gpu/tracyInject/msBetweenClockCalibration=0 --/app/profilerMask=1 --/profiler/channels/carb.tasking/enabled=false --/profiler/channels/carb.events/enabled=false --/plugins/carb.profiler-tracy.plugin/fibersAsThreads=false"
+$SCRIPT_DIR/../isaaclab.sh -p $TARGET_SCRIPT $SCRIPT_ARGS --headless --kit_args "--enable isaacsim.ros2.bridge"
