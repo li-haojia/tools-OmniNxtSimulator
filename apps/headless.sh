@@ -31,4 +31,4 @@ TARGET_SCRIPT=$1
 SCRIPT_ARGS=${@:2}
 check_exts_dir
 check_target_script $TARGET_SCRIPT
-$SCRIPT_DIR/../isaaclab.sh -p $TARGET_SCRIPT $SCRIPT_ARGS --headless --kit_args "--enable isaacsim.ros2.bridge"
+$SCRIPT_DIR/../isaaclab.sh -p $TARGET_SCRIPT $SCRIPT_ARGS $SCRIPT_ARGS --headless --enable_camera --kit_args "--enable isaacsim.ros2.bridge  --enable isaacsim.asset.gen.omap"

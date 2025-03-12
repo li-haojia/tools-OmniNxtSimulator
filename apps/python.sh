@@ -28,7 +28,7 @@ if [ $# -lt 1 ]; then
 fi
 
 TARGET_SCRIPT=$1
-shift
+SCRIPT_ARGS=${@:2}
 check_exts_dir
 check_target_script $TARGET_SCRIPT
-$SCRIPT_DIR/../_isaac_sim/python.sh $TARGET_SCRIPT --headless $@
+$SCRIPT_DIR/../_isaac_sim/python.sh $TARGET_SCRIPT $SCRIPT_ARGS --headless --enable_camera --kit_args "--enable isaacsim.ros2.bridge  --enable isaacsim.asset.gen.omap"
