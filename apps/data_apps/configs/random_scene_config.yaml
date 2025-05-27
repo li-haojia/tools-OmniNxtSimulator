@@ -43,8 +43,8 @@ image_output_path: "path_tracking_sdg"
 writer: "BasicWriter"
 writer_config:
   camera_params: True
-  rgb: True
-  distance_to_camera: True
+  rgb: False
+  distance_to_camera: False
   distance_to_image_plane: True
   colorize_depth: True
   instance_segmentation: False
@@ -53,6 +53,7 @@ writer_config:
   colorize_semantic_segmentation: False
   bounding_box_2d_tight: False
   bounding_box_3d: False
+  use_common_output_dir: False
 
 save_trajectory_info: True
 clear_previous_semantics: False
