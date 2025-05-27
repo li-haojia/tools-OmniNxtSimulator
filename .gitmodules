@@ -1,3 +1,6 @@
 [submodule "IsaacLab"]
 	path = IsaacLab
 	url = https://github.com/isaac-sim/IsaacLab.git
+[submodule "pkgs/gcopter_py"]
+	path = pkgs/gcopter_py
+	url = git@github.com:QuadE2E/GCOPTER_py.git
