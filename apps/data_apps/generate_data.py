@@ -62,7 +62,7 @@ def run_script(script_path, config):
             os.remove(config_path)
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate multiple environments and training data")
+    parser = argparse.ArgumentParser(description="Generate training data")
     parser.add_argument("--output_dir", required=True, help="Base directory for all generated environments")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to generate")
     parser.add_argument("--config", default="apps/data_apps/configs/random_scene_config.yaml", 

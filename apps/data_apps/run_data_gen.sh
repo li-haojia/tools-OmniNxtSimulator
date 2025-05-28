@@ -1,0 +1,1 @@
+export CUDA_VISIBLE_DEVICES=0 && ${ISAACLAB_PATH}/_isaac_sim/python.sh data_apps/generate_data.py --config data_apps/configs/random_scene_config.yaml --output_dir /workspace/isaaclab/data/random_env --num_envs 10
