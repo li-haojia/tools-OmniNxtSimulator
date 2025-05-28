@@ -1,0 +1,30 @@
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Base image from Dockerfile.base
+FROM isaac-lab-base AS gcopter
+
+# Set default RUN shell to bash
+SHELL ["/bin/bash", "-c"]
+
+# Install additional build dependencies for gcopter
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    libhdf5-dev \
+    libeigen3-dev \
+    libompl-dev \
+    libboost-all-dev \
+    && apt -y autoremove && apt clean autoclean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the gcopter_py package
+COPY pkgs ${ISAACLAB_PATH}/pkgs
+
+# Install gcopter_py in development mode
+RUN cd ${ISAACLAB_PATH}/pkgs/gcopter_py/gcopter && \
+    ${ISAACLAB_PATH}/_isaac_sim/python.sh -m pip install -e .
+
+# Set working directory
+WORKDIR ${ISAACLAB_PATH} 
